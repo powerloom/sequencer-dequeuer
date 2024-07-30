@@ -1,0 +1,9 @@
+{
+  "ClientUrl": "PROST_RPC_URL",
+  "ContractAddress": "PROTOCOL_STATE_CONTRACT",
+  "RedisHost": "REDIS_HOST",
+  "RedisPort": "REDIS_PORT",
+  "ChainID": "PROST_CHAIN_ID",
+  "FullNodes": "FULL_NODES",
+  "SlackReportingUrl": "SLACK_REPORTING_URL"
+}
