@@ -3,7 +3,6 @@ package prost
 import (
 	"context"
 	"github.com/cenkalti/backoff/v4"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	log "github.com/sirupsen/logrus"
@@ -29,17 +28,17 @@ func ConfigureContractInstance() {
 	Instance, _ = contract.NewContract(common.HexToAddress(config.SettingsObj.ContractAddress), Client)
 }
 
-func MustQuery[K any](ctx context.Context, call func(opts *bind.CallOpts) (val K, err error)) (K, error) {
-	expBackOff := backoff.NewExponentialBackOff()
-	expBackOff.MaxElapsedTime = 1 * time.Minute
+func MustQuery[K any](ctx context.Context, call func() (val K, err error)) (K, error) {
+	expBackOff := backoff.NewConstantBackOff(1 * time.Second)
+
 	var val K
 	operation := func() error {
 		var err error
-		val, err = call(&bind.CallOpts{})
+		val, err = call()
 		return err
 	}
 	// Use the retry package to execute the operation with backoff
-	err := backoff.Retry(operation, backoff.WithContext(expBackOff, ctx))
+	err := backoff.Retry(operation, backoff.WithMaxRetries(expBackOff, 3))
 	if err != nil {
 		return *new(K), err
 	}

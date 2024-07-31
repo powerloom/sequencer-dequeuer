@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"strings"
@@ -10,13 +11,15 @@ import (
 var SettingsObj *Settings
 
 type Settings struct {
-	ClientUrl         string   `json:"ClientUrl"`
-	ContractAddress   string   `json:"ContractAddress"`
-	RedisHost         string   `json:"RedisHost"`
-	RedisPort         string   `json:"RedisPort"`
-	ChainID           int64    `json:"ChainID"`
-	FullNodes         []string `json:"FullNodes"`
-	SlackReportingUrl string   `json:"SlackReportingUrl"`
+	ClientUrl                 string   `json:"ClientUrl"`
+	ContractAddress           string   `json:"ContractAddress"`
+	RedisHost                 string   `json:"RedisHost"`
+	RedisPort                 string   `json:"RedisPort"`
+	ChainID                   int64    `json:"ChainID"`
+	FullNodes                 []string `json:"FullNodes"`
+	DataMarketAddress         string   `json:"DataMarketAddress"`
+	DataMarketContractAddress common.Address
+	SlackReportingUrl         string `json:"SlackReportingUrl"`
 }
 
 func LoadConfig() {
@@ -37,6 +40,7 @@ func LoadConfig() {
 	if err != nil {
 		log.Debugf("Failed to decode config file: %v", err)
 	}
+	config.DataMarketContractAddress = common.HexToAddress(config.DataMarketAddress)
 
 	SettingsObj = &config
 }

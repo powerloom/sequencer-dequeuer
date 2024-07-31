@@ -10,10 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/encoding/protojson"
 	"math/big"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs"
-	"sequencer-dequeuer/pkgs/contract"
 	"sequencer-dequeuer/pkgs/prost"
 	"sequencer-dequeuer/pkgs/redis"
 	"sequencer-dequeuer/pkgs/utils"
@@ -35,11 +35,14 @@ type SubmissionHandler struct {
 }
 
 func StartSubmissionHandler() {
-	day, err := prost.MustQuery[*big.Int](context.Background(), prost.Instance.DayCounter)
+	day, err := prost.MustQuery[*big.Int](context.Background(), func() (*big.Int, error) {
+		return prost.Instance.DayCounter(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
+	})
 	if err != nil {
 		// Contract query failure - reported by MustQuery
 		log.Errorln("Encountered error while querying dayCounter: ", err.Error())
 	}
+	// TODO: Move to state manager
 	err = redis.Set(context.Background(), pkgs.SequencerDayKey, day.String(), 0)
 	if err != nil {
 		//TODO: Report on slack
@@ -69,14 +72,6 @@ func isFullNode(addr string) bool {
 
 // TODO: Update verification logic
 func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) error {
-	ps := contract.PowerloomProtocolStateRequest{
-		SlotId:      new(big.Int).SetUint64(details.submission.Request.SlotId),
-		Deadline:    new(big.Int).SetUint64(details.submission.Request.Deadline),
-		SnapshotCid: details.submission.Request.SnapshotCid,
-		EpochId:     new(big.Int).SetUint64(details.submission.Request.EpochId),
-		ProjectId:   details.submission.Request.ProjectId,
-	}
-
 	snapshotterAddr, err := utils.RecoverAddress(utils.HashRequest(details.submission.Request), common.Hex2Bytes(details.submission.Signature))
 	// TODO: This can be an incorrect submission altogether - check need for reporting
 	if err != nil {
@@ -84,12 +79,12 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		return errors.New(fmt.Sprintf("Snapshotter address recovery error: %s", err.Error()))
 	}
 
-	if ps.EpochId == nil || ps.EpochId.Cmp(big.NewInt(0)) == 0 {
+	if details.submission.Request.EpochId == 0 {
 		log.Debugln("Received simulated submission: ", details.submission.String())
 
 		var address common.Address
 		retrr := backoff.Retry(func() error {
-			address, err = prost.Instance.SlotSnapshotterMapping(&bind.CallOpts{}, ps.SlotId)
+			address, err = prost.Instance.SlotSnapshotterMapping(&bind.CallOpts{}, new(big.Int).SetUint64(details.submission.Request.SlotId))
 			return err
 		}, backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 5))
 
@@ -105,13 +100,13 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			//log.Debugf("Snapshotter %s passed validation check!", snapshotterAddr.Hex())
 		}
 
-		key := redis.GetSnapshotterSubmissionCountInSlot(snapshotterAddr.Hex(), ps.SlotId)
+		key := redis.GetSnapshotterSubmissionCountInSlot(snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
 		err = redis.RedisClient.Incr(context.Background(), key).Err()
 		if err != nil {
 			log.Errorf("Failed to increment in Redis: %v", err.Error())
 			return errors.New(fmt.Sprintf("Redis client failure: %s", err.Error()))
 		}
-		projectData := strings.Split(ps.ProjectId, "|")
+		projectData := strings.Split(details.submission.Request.ProjectId, "|")
 		var projectIDFormatted string
 		var nodeVersion string
 
@@ -123,7 +118,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			nodeVersion = projectData[len(projectData)-1]
 		}
 
-		key = redis.GetSnapshotterNodeVersion(snapshotterAddr.Hex(), ps.SlotId)
+		key = redis.GetSnapshotterNodeVersion(snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
 
 		// Setting the node version in Redis
 		err = redis.RedisClient.Set(context.Background(), key, nodeVersion, 0).Err()
@@ -133,10 +128,10 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		}
 
 		data := SnapshotData{
-			EpochID:     ps.EpochId.Uint64(),
-			SlotID:      ps.SlotId.Uint64(),
-			Deadline:    ps.Deadline.Uint64(),
-			SnapshotCid: ps.SnapshotCid,
+			EpochID:     details.submission.Request.EpochId,
+			SlotID:      details.submission.Request.SlotId,
+			Deadline:    details.submission.Request.Deadline,
+			SnapshotCid: details.submission.Request.SnapshotCid,
 			ProjectID:   projectIDFormatted,
 			Timestamp:   time.Now().Unix(),
 		}
@@ -147,13 +142,13 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			return errors.New(fmt.Sprintf("json marshalling error: %s", err.Error()))
 		}
 
-		key = redis.GetSnapshotterSlotSubmissionsHtable(snapshotterAddr.Hex(), ps.SlotId)
-		if err := redis.RedisClient.HSet(context.Background(), key, ps.EpochId.Uint64(), jsonData).Err(); err != nil {
+		key = redis.GetSnapshotterSlotSubmissionsHtable(snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
+		if err := redis.RedisClient.HSet(context.Background(), key, details.submission.Request.EpochId, jsonData).Err(); err != nil {
 			log.Errorf("Failed to write to Redis: %v", err)
 			return errors.New(fmt.Sprintf("Redis client failure: %s", err.Error()))
 		}
 
-		key = fmt.Sprintf("lastPing:%s:%s", snapshotterAddr.Hex(), ps.SlotId.String())
+		key = fmt.Sprintf("lastPing:%s:%s", snapshotterAddr.Hex(), strconv.Itoa(int(details.submission.Request.SlotId)))
 
 		redis.RedisClient.Set(context.Background(), key, time.Now().Unix(), 0)
 
@@ -161,10 +156,11 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	}
 
 	if !isFullNode(snapshotterAddr.Hex()) {
-		if ok, err := prost.MustQuery[bool](
-			context.Background(),
-			func(opts *bind.CallOpts) (bool, error) {
-				return prost.Instance.AcceptSnapshot(&bind.CallOpts{}, new(big.Int).SetUint64(details.submission.Request.SlotId), details.submission.Request.SnapshotCid, new(big.Int).SetUint64(details.submission.Request.EpochId), details.submission.Request.ProjectId, ps, common.Hex2Bytes(details.submission.Signature))
+		// TODO: Merge state changes
+		if ok, err := prost.MustQuery[bool](context.Background(),
+			func() (bool, error) {
+				//return prost.Instance.AcceptSnapshot(&bind.CallOpts{}, new(big.Int).SetUint64(details.submission.Request.SlotId), details.submission.Request.SnapshotCid, new(big.Int).SetUint64(details.submission.Request.EpochId), details.submission.Request.ProjectId, ps, common.Hex2Bytes(details.submission.Signature))
+				return false, nil
 			},
 		); err != nil {
 			log.Errorln("Error verifying snapshot submission: ", err.Error())
@@ -176,7 +172,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	}
 
 	key := redis.SubmissionKey(details.submission.Request.EpochId, details.submission.Request.ProjectId, new(big.Int).SetUint64(details.submission.Request.SlotId).String())
-	value := fmt.Sprintf("%s.%s", details.submissionId.String(), details.submission.String())
+	value := fmt.Sprintf("%s.%s", details.submissionId.String(), protojson.Format(details.submission))
 	set := redis.SubmissionSetByHeaderKey(details.submission.Request.EpochId, details.submission.Header) //fmt.Sprintf("%s.%d.%s", CollectorKey, submission.Request.EpochId, submission.Header)
 
 	if val, _ := redis.Get(context.Background(), key); val != "" {
