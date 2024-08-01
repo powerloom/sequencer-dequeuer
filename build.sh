@@ -1,4 +1,2 @@
-#bash scripts/generate.sh
-cd cmd
+cd cmd || exit
 go build .
-#docker-compose -f docker-compose.yaml up
