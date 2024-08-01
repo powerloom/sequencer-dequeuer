@@ -5,42 +5,56 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
 	"os"
-	"strings"
+	"strconv"
 )
 
 var SettingsObj *Settings
 
 type Settings struct {
-	ClientUrl                 string   `json:"ClientUrl"`
-	ContractAddress           string   `json:"ContractAddress"`
-	RedisHost                 string   `json:"RedisHost"`
-	RedisPort                 string   `json:"RedisPort"`
-	ChainID                   int64    `json:"ChainID"`
-	FullNodes                 []string `json:"FullNodes"`
-	DataMarketAddress         string   `json:"DataMarketAddress"`
+	ClientUrl                 string
+	ContractAddress           string
+	RedisHost                 string
+	RedisPort                 string
+	ChainID                   int64
+	FullNodes                 []string
+	DataMarketAddress         string
 	DataMarketContractAddress common.Address
-	SlackReportingUrl         string `json:"SlackReportingUrl"`
+	SlackReportingUrl         string
 }
 
 func LoadConfig() {
-	file, err := os.Open(strings.TrimSuffix(os.Getenv("CONFIG_PATH"), "/") + "/config/settings.json")
+	fullNodes := getEnv("FULL_NODES", "[]")
+	fullNodesList := []string{}
+	err := json.Unmarshal([]byte(fullNodes), &fullNodesList)
 	if err != nil {
-		log.Fatalf("Failed to open config file: %v", err)
+		log.Fatalf("Failed to parse FULL_NODES environment variable: %v", err)
 	}
-	defer func(file *os.File) {
-		err = file.Close()
-		if err != nil {
-			log.Errorf("Unable to close file: %s", err.Error())
-		}
-	}(file)
 
-	decoder := json.NewDecoder(file)
-	config := Settings{}
-	err = decoder.Decode(&config)
+	chainId, err := strconv.ParseInt(getEnv("CHAIN_ID", ""), 10, 64)
 	if err != nil {
-		log.Debugf("Failed to decode config file: %v", err)
+		log.Fatalf("Failed to parse CHAIN_ID environment variable: %v", err)
 	}
+
+	config := Settings{
+		ClientUrl:         getEnv("PROST_RPC_URL", ""),
+		ContractAddress:   getEnv("PROTOCOL_STATE_CONTRACT", ""),
+		RedisHost:         getEnv("REDIS_HOST", ""),
+		RedisPort:         getEnv("REDIS_PORT", ""),
+		SlackReportingUrl: getEnv("SLACK_REPORTING_URL", ""),
+		DataMarketAddress: getEnv("DATA_MARKET_ADDRESS", ""),
+		FullNodes:         fullNodesList,
+		ChainID:           chainId,
+	}
+
 	config.DataMarketContractAddress = common.HexToAddress(config.DataMarketAddress)
 
 	SettingsObj = &config
+}
+
+func getEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
 }

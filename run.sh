@@ -1,1 +1,1 @@
-docker-compose -f docker-compose.yaml up
+docker run --env-file .env sequencer-dequeuer

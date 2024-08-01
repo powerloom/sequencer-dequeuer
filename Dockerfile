@@ -22,7 +22,5 @@ FROM scratch
 # Copy the binary from the builder stage
 COPY --from=builder /dequeuer /dequeuer
 
-# Expose port 9000
-
 # Command to run the application
 CMD ["/dequeuer"]
