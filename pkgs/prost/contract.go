@@ -2,10 +2,13 @@ package prost
 
 import (
 	"context"
+	"crypto/tls"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	log "github.com/sirupsen/logrus"
+	"net/http"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs/contract"
 	"time"
@@ -18,11 +21,11 @@ var (
 )
 
 func ConfigureClient() {
-	var err error
-	Client, err = ethclient.Dial(config.SettingsObj.ClientUrl)
+	rpcClient, err := rpc.DialOptions(context.Background(), config.SettingsObj.ClientUrl, rpc.WithHTTPClient(&http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}))
 	if err != nil {
 		log.Fatal(err)
 	}
+	Client = ethclient.NewClient(rpcClient)
 }
 func ConfigureContractInstance() {
 	Instance, _ = contract.NewContract(common.HexToAddress(config.SettingsObj.ContractAddress), Client)
