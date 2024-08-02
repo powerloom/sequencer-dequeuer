@@ -14,8 +14,10 @@ import (
 	"math/big"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs"
+	"sequencer-dequeuer/pkgs/contract"
 	"sequencer-dequeuer/pkgs/prost"
 	"sequencer-dequeuer/pkgs/redis"
+	"sequencer-dequeuer/pkgs/reporting"
 	"sequencer-dequeuer/pkgs/utils"
 	"strconv"
 	"strings"
@@ -157,17 +159,39 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 	if !isFullNode(snapshotterAddr.Hex()) {
 		// TODO: Merge state changes
-		if ok, err := prost.MustQuery[bool](context.Background(),
-			func() (bool, error) {
-				//return prost.Instance.AcceptSnapshot(&bind.CallOpts{}, new(big.Int).SetUint64(details.submission.Request.SlotId), details.submission.Request.SnapshotCid, new(big.Int).SetUint64(details.submission.Request.EpochId), details.submission.Request.ProjectId, ps, common.Hex2Bytes(details.submission.Signature))
-				return false, nil
-			},
-		); err != nil {
-			log.Errorln("Error verifying snapshot submission: ", err.Error())
+
+		slotInfoStr, err := redis.Get(context.Background(), redis.SlotInfo(strconv.FormatUint(details.submission.Request.SlotId, 10)))
+		if err != nil || slotInfoStr == "" {
+			reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Could not fetch slot info from cache: %s", err.Error()), time.Now().String(), "High")
+			log.Errorln("Could not fetch slot info from cache: ", err.Error())
 			return err
-		} else if !ok {
-			log.Debugln("Snapshot submission rejected: ", details.submissionId.String())
-			return errors.New("Invalid snapshot")
+		} else {
+			var slotInfo contract.PowerloomDataMarketSlotInfo
+			err = json.Unmarshal([]byte(slotInfoStr), &slotInfo)
+			if err != nil {
+				log.Errorln("Unable to unmarshal slotInfo: ", slotInfoStr)
+				reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Unable to unmarshal slotInfo: %s", slotInfoStr), time.Now().String(), "High")
+				return err
+			}
+
+			// AllSnapshotters state check to be added
+			var errMsg string
+			if snapshotterAddr.Hex() != slotInfo.SnapshotterAddress.Hex() {
+				errMsg = "Incorrect snapshotter address for specified slot"
+			} else {
+				currentEpochStr, _ := redis.Get(context.Background(), pkgs.CurrentEpoch)
+				currentEpoch, err := strconv.Atoi(currentEpochStr)
+				if err != nil {
+					reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error()), time.Now().String(), "High")
+					log.Errorf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error())
+				} else if diff := uint64(currentEpoch) - details.submission.Request.EpochId; diff < 0 || diff > 1 {
+					errMsg = "Incorrect epochId supplied in request"
+				}
+			}
+			if errMsg != "" {
+				log.Debugln("Snapshot submission rejected: ", errMsg)
+				return errors.New("Invalid snapshot")
+			}
 		}
 	}
 

@@ -2,6 +2,7 @@ package pkgs
 
 import "time"
 
+const CurrentEpoch = "CurrentEpochID"
 const CollectorKey = "SnapshotCollector"
 const TxsKey = "SnapshotTransactions"
 const TimeSlotKey = "TimeSlotPreference"

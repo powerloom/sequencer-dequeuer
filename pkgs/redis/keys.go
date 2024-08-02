@@ -14,6 +14,14 @@ func SubmissionKey(epochId uint64, projectId, slotId string) string {
 	return fmt.Sprintf("%d.%s.%s", epochId, projectId, slotId)
 }
 
+func ContractStateVariable(varName string) string {
+	return fmt.Sprintf("ProtocolState.%s", varName)
+}
+
+func SlotInfo(slotId string) string {
+	return fmt.Sprintf("%s.%s", ContractStateVariable("SlotInfo"), slotId)
+}
+
 func EpochSubmissionsCount(epochId uint64) string {
 	return fmt.Sprintf("%s.%d", pkgs.EpochSubmissionsCountKey, epochId)
 }
