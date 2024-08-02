@@ -180,12 +180,17 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 				errMsg = "Incorrect snapshotter address for specified slot"
 			} else {
 				currentEpochStr, _ := redis.Get(context.Background(), pkgs.CurrentEpoch)
-				currentEpoch, err := strconv.Atoi(currentEpochStr)
-				if err != nil {
-					reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error()), time.Now().String(), "High")
-					log.Errorf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error())
-				} else if diff := uint64(currentEpoch) - details.submission.Request.EpochId; diff < 0 || diff > 1 {
-					errMsg = "Incorrect epochId supplied in request"
+				if currentEpochStr == "" {
+					reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Current epochId not stored in redis: %s", err.Error()), time.Now().String(), "High")
+					log.Errorf("Current epochId not stored in redis: %s", err.Error())
+				} else {
+					currentEpoch, err := strconv.Atoi(currentEpochStr)
+					if err != nil {
+						reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error()), time.Now().String(), "High")
+						log.Errorf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error())
+					} else if diff := uint64(currentEpoch) - details.submission.Request.EpochId; diff < 0 || diff > 1 {
+						errMsg = "Incorrect epochId supplied in request"
+					}
 				}
 			}
 			if errMsg != "" {
