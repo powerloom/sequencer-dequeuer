@@ -216,8 +216,15 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 	log.Debugf("Successfully set submission with set %s and key %s", set, key)
 
+	// expire submissions set by header key
+	if err := redis.RedisClient.Expire(context.Background(), set, 30*time.Minute).Err(); err != nil {
+		log.Errorf("Failed to set expiry for submission set by header key: %v", err)
+		// send notification
+		reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Failed to set expiry for submission set by header key: %v", err), time.Now().String(), "High")
+		return fmt.Errorf("redis client failure: %s", err.Error())
+	}
+
 	// Store increment submission count for this epoch
-	// TODO: This can be a redis failure, that is critical but need to evaluate next steps - ideally just report and move on
 	err = redis.RedisClient.Incr(context.Background(), redis.EpochSubmissionsCount(details.submission.Request.EpochId)).Err()
 	if err != nil {
 		reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Error incrementing epochsubmissions: %v", err), time.Now().String(), "High")
