@@ -217,25 +217,23 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 	// Store increment submission count for this epoch
 	// TODO: This can be a redis failure, that is critical but need to evaluate next steps - ideally just report and move on
-	if val, _ := redis.Get(context.Background(), redis.EpochSubmissionsCount(details.submission.Request.EpochId)); val != "" {
-		count, _ := strconv.Atoi(val)
-		count += 1
-		redis.Set(context.Background(), redis.EpochSubmissionsCount(details.submission.Request.EpochId), strconv.Itoa(count), 4*time.Hour)
-	} else {
-		redis.Set(context.Background(), redis.EpochSubmissionsCount(details.submission.Request.EpochId), "1", 4*time.Hour)
+	err = redis.RedisClient.Incr(context.Background(), redis.EpochSubmissionsCount(details.submission.Request.EpochId)).Err()
+	if err != nil {
+		reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Error incrementing epochsubmissions: %v", err), time.Now().String(), "High")
+		log.Errorf("Error incrementing epochsubmissions: %v", err)
 	}
-
+	
 	// Add submissions to epochSubmissions HTable
 	submissionJSON, err := json.Marshal(details.submission)
 	if err != nil {
 		log.Errorf("Error serializing submission: %v", err)
-		return errors.New(fmt.Sprintf("json marshalling error: %s", err.Error()))
+		return fmt.Errorf("json marshalling error: %s", err.Error())
 	}
 
 	epochKey := redis.EpochSubmissionsKey(details.submission.Request.EpochId)
 	if err := redis.RedisClient.HSet(context.Background(), epochKey, details.submissionId.String(), submissionJSON).Err(); err != nil {
 		log.Errorf("Failed to write submission details to Redis: %v", err)
-		return errors.New(fmt.Sprintf("Redis client failure: %s", err.Error()))
+		return fmt.Errorf("redis client failure: %s", err.Error())	
 	}
 
 	return nil
