@@ -209,7 +209,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		log.Debugln("Submission already exists: ", val)
 		return nil
 	}
-	if err := redis.SetSubmission(context.Background(), key, value, set, 5*time.Minute); err != nil {
+	if err := redis.SetSubmission(context.Background(), key, value, set, 20*time.Minute); err != nil {
 		log.Errorln("Error setting key-value pair: ", err.Error())
 		return err
 	}
