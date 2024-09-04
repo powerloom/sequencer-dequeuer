@@ -243,7 +243,10 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		log.Errorf("Failed to write submission details to Redis: %v", err)
 		return fmt.Errorf("redis client failure: %s", err.Error())
 	}
-
+	if err := redis.RedisClient.Expire(context.Background(), epochKey, 30*time.Minute).Err(); err != nil {
+		log.Errorf("Failed to set expiry for epoch submissions hash table %s: %v", epochKey, err)
+		return fmt.Errorf("redis client failure: %s", err.Error())
+	}
 	return nil
 }
 
