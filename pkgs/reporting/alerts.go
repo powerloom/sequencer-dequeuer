@@ -2,6 +2,7 @@ package reporting
 
 import (
 	"fmt"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -28,8 +29,7 @@ func (s SequencerAlert) String() string {
 var SequencerAlertsChannel = make(chan SequencerAlert, 10000)
 
 func SendFailureNotification(processName, errorMsg, timestamp, severity string) {
-	var issue SequencerAlert
-	issue = SequencerAlert{
+	issue := SequencerAlert{
 		processName,
 		errorMsg,
 		timestamp,
