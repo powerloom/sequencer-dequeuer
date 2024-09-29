@@ -79,7 +79,20 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	// TODO: This can be an incorrect submission altogether - check need for reporting
 	if err != nil {
 		log.Errorln("Unable to recover snapshotter address: ", err.Error())
-		return errors.New(fmt.Sprintf("Snapshotter address recovery error: %s", err.Error()))
+		return fmt.Errorf("snapshotter address recovery error: %s", err.Error())
+	}
+
+	// Verify if the snapshotter address is included in the set of flagged accounts in Redis
+	flaggedSnapshotterKey := redis.FlaggedSnapshotterKey()
+	isFlagged, err := redis.RedisClient.SIsMember(context.Background(), flaggedSnapshotterKey, snapshotterAddr.Hex()).Result()
+	if err != nil {
+		log.Errorf("Error querying Redis for flagged snapshotters: %v", err)
+		return fmt.Errorf("redis query error: %s", err.Error())
+	}
+
+	if isFlagged {
+		log.Debugln("Submission from flagged snapshotter: ", snapshotterAddr.Hex())
+		return fmt.Errorf("snapshot submission rejected: snapshotter %s is flagged", snapshotterAddr.Hex())
 	}
 
 	if details.submission.Request.EpochId == 0 {
@@ -98,7 +111,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 		if address.Hex() != snapshotterAddr.Hex() {
 			log.Errorln("Incorrect snapshotter address: ", snapshotterAddr.Hex())
-			return errors.New(fmt.Sprintf("Snapshotter address not the one configured in slot: %s", snapshotterAddr.Hex()))
+			return fmt.Errorf("snapshotter address not the one configured in slot: %s", snapshotterAddr.Hex())
 		} else {
 			//log.Debugf("Snapshotter %s passed validation check!", snapshotterAddr.Hex())
 		}
@@ -107,8 +120,9 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		err = redis.RedisClient.Incr(context.Background(), key).Err()
 		if err != nil {
 			log.Errorf("Failed to increment in Redis: %v", err.Error())
-			return errors.New(fmt.Sprintf("Redis client failure: %s", err.Error()))
+			return fmt.Errorf("redis client failure: %s", err.Error())
 		}
+
 		projectData := strings.Split(details.submission.Request.ProjectId, "|")
 		var projectIDFormatted string
 		var nodeVersion string
@@ -127,7 +141,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		err = redis.RedisClient.Set(context.Background(), key, nodeVersion, 0).Err()
 		if err != nil {
 			log.Errorf("Failed to set node version in Redis: %v", err)
-			return errors.New(fmt.Sprintf("Redis client failure: %s", err.Error()))
+			return fmt.Errorf("redis client failure: %s", err.Error())
 		}
 
 		data := SnapshotData{
@@ -142,13 +156,13 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		jsonData, err := json.Marshal(data)
 		if err != nil {
 			log.Errorf("Error serializing data: %v", err)
-			return errors.New(fmt.Sprintf("json marshalling error: %s", err.Error()))
+			return fmt.Errorf("json marshalling error: %s", err.Error())
 		}
 
 		key = redis.GetSnapshotterSlotSubmissionsHtable(snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
 		if err := redis.RedisClient.HSet(context.Background(), key, details.submission.Request.EpochId, jsonData).Err(); err != nil {
 			log.Errorf("Failed to write to Redis: %v", err)
-			return errors.New(fmt.Sprintf("Redis client failure: %s", err.Error()))
+			return fmt.Errorf("redis client failure: %s", err.Error())
 		}
 
 		key = fmt.Sprintf("lastPing:%s:%s", snapshotterAddr.Hex(), strconv.Itoa(int(details.submission.Request.SlotId)))
@@ -180,7 +194,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			if snapshotterAddr.Hex() != slotInfo.SnapshotterAddress.Hex() {
 				errMsg = "Incorrect snapshotter address extracted" + string(snapshotterAddr.Hex()) + "for specified slot " + strconv.FormatUint(details.submission.Request.SlotId, 10) + " : " + string(slotInfo.SnapshotterAddress.Hex())
 			} else {
-				currentEpochStr, _ := redis.Get(context.Background(), pkgs.CurrentEpoch)
+				currentEpochStr, err := redis.Get(context.Background(), pkgs.CurrentEpoch)
 				if currentEpochStr == "" {
 					reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Current epochId not stored in redis: %s", err.Error()), time.Now().String(), "High")
 					log.Errorf("Current epochId not stored in redis: %s", err.Error())
@@ -189,14 +203,14 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 					if err != nil {
 						reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error()), time.Now().String(), "High")
 						log.Errorf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error())
-					} else if diff := uint64(currentEpoch) - details.submission.Request.EpochId; diff < 0 || diff > 1 {
+					} else if diff := uint64(currentEpoch) - details.submission.Request.EpochId; diff > 1 {
 						errMsg = "Incorrect epochId supplied in request"
 					}
 				}
 			}
 			if errMsg != "" {
 				log.Debugln("Snapshot submission rejected: ", errMsg)
-				return errors.New("Invalid snapshot")
+				return errors.New("invalid snapshot")
 			}
 		}
 	}

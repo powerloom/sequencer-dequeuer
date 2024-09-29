@@ -6,6 +6,10 @@ import (
 	"sequencer-dequeuer/pkgs"
 )
 
+func FlaggedSnapshotterKey() string {
+	return pkgs.FlaggedSnapshotterKey
+}
+
 func SubmissionSetByHeaderKey(epoch uint64, header string) string {
 	return fmt.Sprintf("%s.%d.%s", pkgs.CollectorKey, epoch, header)
 }
