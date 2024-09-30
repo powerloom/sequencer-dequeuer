@@ -112,6 +112,14 @@ func GetValidSubmissionKeys(ctx context.Context, epochID *big.Int, headers []str
 	return allKeys, nil
 }
 
+func Incr(ctx context.Context, key string) (int64, error) {
+	result, err := RedisClient.Incr(ctx, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	return result, nil
+}
+
 func ResetCollectorDBSubmissions(ctx context.Context, epochID *big.Int, headers []string) {
 	// Define the set key based on whether epochID is provided
 	var setKey string
