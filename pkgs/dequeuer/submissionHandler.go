@@ -20,6 +20,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -112,8 +113,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		if address.Hex() != snapshotterAddr.Hex() {
 			log.Errorln("Incorrect snapshotter address: ", snapshotterAddr.Hex())
 			return fmt.Errorf("snapshotter address not the one configured in slot: %s", snapshotterAddr.Hex())
-		} else {
-			//log.Debugf("Snapshotter %s passed validation check!", snapshotterAddr.Hex())
 		}
 
 		key := redis.GetSnapshotterSubmissionCountInSlot(snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
@@ -213,6 +212,39 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 				return errors.New("invalid snapshot")
 			}
 		}
+
+		// Extract the contract address from the projectID
+		projectData := strings.Split(details.submission.Request.ProjectId, ":")
+
+		// Ensure there are exactly three parts
+		if len(projectData) != 3 {
+			log.Printf("unexpected format for projectID: %s", details.submission.Request.ProjectId)
+		}
+
+		// Get the contract address from the project data
+		expectedContractAddr := projectData[1]
+
+		// Retrieve the initial pairs from the configuration settings
+		initialPairs := config.SettingsObj.InitialPairs
+
+		pairContractIndex, err := fetchPairContractIndex(
+			int64(details.submission.Request.EpochId),
+			int64(details.submission.Request.SlotId),
+			int64(len(initialPairs)),
+			snapshotterAddr,
+		)
+		if err != nil {
+			reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprint("Failed to fetch pair contract index: ", err.Error()), time.Now().String(), "High")
+			log.Error("Failed to fetch pair contract index: ", err.Error())
+		}
+
+		// Retrieve the contract address corresponding to the calculated pair contract index
+		fetchedContractAddr := initialPairs[pairContractIndex]
+
+		if expectedContractAddr != fetchedContractAddr {
+			log.Errorln("Mismatched pair contract index: ", err.Error())
+			return errors.New("failed to verify pair contract index")
+		}
 	}
 
 	key := redis.SubmissionKey(details.submission.Request.EpochId, details.submission.Request.ProjectId, new(big.Int).SetUint64(details.submission.Request.SlotId).String())
@@ -262,6 +294,48 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		return fmt.Errorf("redis client failure: %s", err.Error())
 	}
 	return nil
+}
+
+func getSnapshotterHash(snapshotAddr common.Address) *big.Int {
+	// Convert the address into a lower case string
+	snapshotterAddrString := strings.ToLower(snapshotAddr.String())
+
+	// Convert the hexadecimal string to an integer (base 16)
+	intVal := new(big.Int)
+	intVal.SetString(snapshotterAddrString[2:], 16)
+
+	// Calculate snapshotter hash using Keccak256 algorithm
+	snapshotterHash := crypto.Keccak256(intVal.Bytes())
+
+	// Convert snapshotterHash (byte slice) to big.Int
+	snapshotterHashBigInt := new(big.Int).SetBytes(snapshotterHash)
+
+	return snapshotterHashBigInt
+}
+
+func fetchPairContractIndex(epochID, slotID, size int64, snapshotterAddr common.Address) (int64, error) {
+	// Calculate snapshotter hash
+	snapshotterHash := getSnapshotterHash(snapshotterAddr)
+
+	// Fetch current day
+	currentDay, err := prost.FetchCurrentDay()
+	if err != nil {
+		return 0, err
+	}
+
+	// Initialize a total variable for the calculation
+	calculationSum := new(big.Int)
+
+	// Perform the addition
+	calculationSum.
+		Add(big.NewInt(epochID), snapshotterHash). // Add epochID and snapshotterHash
+		Add(calculationSum, big.NewInt(slotID)).   // Add slotID to the result
+		Add(calculationSum, currentDay)            // Add currentDay to the result
+
+	// Calculate contract index based on the size of monitored pairs
+	calculatedPairIndex := new(big.Int).Mod(calculationSum, big.NewInt(size)).Int64()
+
+	return calculatedPairIndex, nil
 }
 
 func (s *SubmissionHandler) startSubmissionDequeuer() {

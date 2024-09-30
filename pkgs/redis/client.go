@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	log "github.com/sirupsen/logrus"
 	"math/big"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs/reporting"
 	"strconv"
 	"time"
+
+	"github.com/go-redis/redis/v8"
+	log "github.com/sirupsen/logrus"
 )
 
 var RedisClient *redis.Client
@@ -137,8 +138,6 @@ func ResetCollectorDBSubmissions(ctx context.Context, epochID *big.Int, headers 
 
 			// Optionally, delete the set itself to clean up
 			RedisClient.Del(ctx, setKey)
-		} else {
-			//log.Debugln("No keys found to delete.")
 		}
 	}
 }
