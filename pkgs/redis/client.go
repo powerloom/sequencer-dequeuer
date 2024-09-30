@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	log "github.com/sirupsen/logrus"
 	"math/big"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs/reporting"
 	"strconv"
 	"time"
+
+	"github.com/go-redis/redis/v8"
+	log "github.com/sirupsen/logrus"
 )
 
 var RedisClient *redis.Client
@@ -109,6 +110,14 @@ func GetValidSubmissionKeys(ctx context.Context, epochID *big.Int, headers []str
 		}
 	}
 	return allKeys, nil
+}
+
+func Incr(ctx context.Context, key string) (int64, error) {
+	result, err := RedisClient.Incr(ctx, key).Result()
+	if err != nil {
+		return 0, err
+	}
+	return result, nil
 }
 
 func ResetCollectorDBSubmissions(ctx context.Context, epochID *big.Int, headers []string) {

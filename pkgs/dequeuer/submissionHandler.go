@@ -200,6 +200,24 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			}
 		}
 	}
+	slotEpochCounterKey := redis.SlotEpochSubmissionsKey(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
+	count, err := redis.Incr(context.Background(), slotEpochCounterKey)
+	if err != nil {
+		log.Errorf("Failed to increment slot epoch counter: %v", err)
+		return fmt.Errorf("redis client failure: %s", err.Error())
+	} else {
+		if count > 2 {
+			errMsg := fmt.Sprintf("Slot epoch submission count exceeded for slot ID %s", strconv.FormatUint(details.submission.Request.SlotId, 10))
+			log.Errorln("Slot epoch submission count exceeded: ", errMsg)
+			redis.Set(
+				context.Background(),
+				redis.SlotEpochSubmissionCountExceeded(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId),
+				"true",
+				5*time.Minute,
+			)
+			return errors.New(errMsg)
+		}
+	}
 
 	key := redis.SubmissionKey(details.submission.Request.EpochId, details.submission.Request.ProjectId, new(big.Int).SetUint64(details.submission.Request.SlotId).String())
 	value := fmt.Sprintf("%s.%s", details.submissionId.String(), protojson.Format(details.submission))

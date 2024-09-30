@@ -18,6 +18,10 @@ func ContractStateVariable(varName string) string {
 	return fmt.Sprintf("ProtocolState.%s", varName)
 }
 
+func SlotEpochSubmissionCountExceeded(slotId string, epochId uint64) string {
+	return fmt.Sprintf("SlotEpochSubmissionCountExceeded.%s.%d", slotId, epochId)
+}
+
 func SlotInfo(slotId string) string {
 	return fmt.Sprintf("%s.%s", ContractStateVariable("SlotInfo"), slotId)
 }
@@ -28,6 +32,10 @@ func EpochSubmissionsCount(epochId uint64) string {
 
 func EpochSubmissionsKey(epochId uint64) string {
 	return fmt.Sprintf("%s.%d", pkgs.EpochSubmissionsKey, epochId)
+}
+
+func SlotEpochSubmissionsKey(slotId string, epochId uint64) string {
+	return fmt.Sprintf("SlotEpochCounter.%s.%d", slotId, epochId)
 }
 
 func TriggeredProcessLog(process, identifier string) string {
