@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"reflect"
-	"sequencer-dequeuer/pkgs"
 	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -42,7 +41,8 @@ func LoadConfig() {
 		log.Fatalf("Failed to parse CHAIN_ID environment variable: %v", err)
 	}
 
-	initialPairs, err := fetchInitialPairs()
+	url := getEnv("SETTINGS_URL", "")
+	initialPairs, err := fetchInitialPairs(url)
 	if err != nil {
 		log.Fatalf("Failed to fetch initial pairs: %v", err)
 	}
@@ -73,8 +73,8 @@ func getEnv(key, defaultValue string) string {
 	return value
 }
 
-func fetchInitialPairs() ([]string, error) {
-	settings, err := fetchSettingsObject(pkgs.URL)
+func fetchInitialPairs(url string) ([]string, error) {
+	settings, err := fetchSettingsObject(url)
 	if err != nil {
 		return nil, err
 	}
