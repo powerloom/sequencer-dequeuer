@@ -22,7 +22,8 @@ import (
 var Instance *contract.Contract
 
 var (
-	Client *ethclient.Client
+	Client       *ethclient.Client
+	epochsInADay = 720
 )
 
 func ConfigureClient() {
@@ -53,9 +54,24 @@ func MustQuery[K any](ctx context.Context, call func() (val K, err error)) (K, e
 	return val, err
 }
 
-func getExpirationTime() time.Time {
-	daySize := 864000000 * time.Microsecond   // DAY_SIZE in microseconds converted to time.Duration
-	expirationTime := time.Now().Add(daySize) // Calculate the expiration time by adding DAY_SIZE
+func getExpirationTime(epochID int64) time.Time {
+	// DAY_SIZE in microseconds
+	daySize := 864000000 * time.Microsecond
+
+	// Calculate the duration of each epoch
+	epochDuration := daySize / time.Duration(epochsInADay)
+
+	// Calculate the number of epochs left for the day
+	remainingEpochs := epochID % int64(epochsInADay)
+
+	// Calculate the expiration duration
+	expirationDuration := epochDuration * time.Duration(remainingEpochs)
+
+	// Set a buffer of 10 seconds to expire slightly earlier
+	bufferDuration := 10 * time.Second
+
+	// Calculate the expiration time by subtracting the buffer duration
+	expirationTime := time.Now().Add(expirationDuration - bufferDuration)
 
 	return expirationTime
 }
@@ -78,8 +94,15 @@ func FetchCurrentDay() (*big.Int, error) {
 		return nil, err
 	}
 
+	// Get the current epoch
+	currentEpoch, err := Instance.CurrentEpoch(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
+	if err != nil {
+		log.Printf("Failed to fetch current epoch from contract: %v", err)
+		return nil, err
+	}
+
 	// Calculate expiration time
-	expirationTime := getExpirationTime()
+	expirationTime := getExpirationTime(currentEpoch.EpochId.Int64())
 
 	// Set the current day in Redis with the calculated expiration duration
 	if err := redis.Set(context.Background(), pkgs.CurrentDay, currentDay.String(), time.Until(expirationTime)); err != nil {

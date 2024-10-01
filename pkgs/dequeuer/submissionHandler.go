@@ -202,6 +202,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 					log.Errorln("Slot epoch submission count exceeded: ", errMsg)
 					return errors.New(errMsg)
 				}
+
 				slotEpochCounterKey := redis.SlotEpochSubmissionsKey(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
 				count, err := redis.Incr(context.Background(), slotEpochCounterKey)
 				if err != nil {
@@ -220,7 +221,8 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 						return errors.New(errMsg)
 					}
 				}
-				currentEpochStr, _ := redis.Get(context.Background(), pkgs.CurrentEpoch)
+
+				currentEpochStr, err := redis.Get(context.Background(), pkgs.CurrentEpoch)
 				if currentEpochStr == "" {
 					reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Current epochId not stored in redis: %s", err.Error()), time.Now().String(), "High")
 					log.Errorf("Current epochId not stored in redis: %s", err.Error())
