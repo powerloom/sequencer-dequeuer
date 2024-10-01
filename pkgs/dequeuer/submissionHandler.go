@@ -359,7 +359,7 @@ func fetchPairContractIndex(epochID, slotID, size int64, snapshotterAddr common.
 		Add(calculationSum, big.NewInt(slotID)).   // Add slotID to the result
 		Add(calculationSum, currentDay)            // Add currentDay to the result
 
-	// Calculate contract index based on the size of monitored pairs
+	// Calculate contract index based on the size of initial pairs
 	calculatedPairIndex := new(big.Int).Mod(calculationSum, big.NewInt(size)).Int64()
 
 	return calculatedPairIndex, nil
