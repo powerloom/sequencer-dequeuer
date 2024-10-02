@@ -2,10 +2,13 @@ package dequeuer
 
 import (
 	"context"
+	"fmt"
+	"math/big"
 	"sequencer-dequeuer/pkgs"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/assert"
 )
@@ -72,4 +75,30 @@ func TestVerifyFlaggedSnapshotter(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPairContractIndexCalculation(t *testing.T) {
+	// Inputs to the function
+	epochID := int64(5) // Test value for epochID
+	slotID := int64(3)  // Test value for slotID
+	size := int64(10)   // Test size of the initial pairs
+	snapshotterAddr := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678")
+
+	// Mocked return values for the function inputs
+	snapshotterHash := getSnapshotterHash(snapshotterAddr) // Assume this hash is calculated correctly
+	fmt.Println("Snapshotter hash is: ", snapshotterHash)
+
+	currentDay := big.NewInt(40) // Mocked value for current day
+
+	// Step-by-step manual calculation for expected result
+	calculationSum := new(big.Int)
+	calculationSum.Add(big.NewInt(epochID), snapshotterHash) // Add epochID and snapshotterHash
+	calculationSum.Add(calculationSum, big.NewInt(slotID))   // Add slotID to the result
+	calculationSum.Add(calculationSum, currentDay)           // Add currentDay to the result
+
+	// Calculate contract index based on the size of initial pairs
+	pairContractIndex := new(big.Int).Mod(calculationSum, big.NewInt(size)).Int64()
+
+	// Print the calculated pair contract index
+	fmt.Println("Pair contract index is", pairContractIndex)
 }
