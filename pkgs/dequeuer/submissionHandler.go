@@ -180,33 +180,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			if snapshotterAddr.Hex() != slotInfo.SnapshotterAddress.Hex() {
 				errMsg = "Incorrect snapshotter address extracted" + string(snapshotterAddr.Hex()) + "for specified slot " + strconv.FormatUint(details.submission.Request.SlotId, 10) + " : " + string(slotInfo.SnapshotterAddress.Hex())
 			} else {
-				exists, err := redis.RedisClient.Exists(context.Background(), redis.SlotEpochSubmissionCountExceeded(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)).Result()
-				if err != nil {
-					log.Errorf("Failed to check if slot epoch submission count exceeded exists: %v", err)
-					return fmt.Errorf("redis client failure: %s", err.Error())
-				} else if exists > 0 {
-					errMsg = fmt.Sprintf("Slot epoch submission count exceeded for slot ID %s and epoch ID %d", strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
-					log.Errorln("Slot epoch submission count exceeded: ", errMsg)
-					return errors.New(errMsg)
-				}
-				slotEpochCounterKey := redis.SlotEpochSubmissionsKey(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
-				count, err := redis.Incr(context.Background(), slotEpochCounterKey)
-				if err != nil {
-					log.Errorf("Failed to increment slot epoch counter: %v", err)
-					return fmt.Errorf("redis client failure: %s", err.Error())
-				} else {
-					if count > 2 {
-						errMsg := fmt.Sprintf("Slot epoch submission count exceeded for slot ID %s", strconv.FormatUint(details.submission.Request.SlotId, 10))
-						log.Errorln("Slot epoch submission count exceeded: ", errMsg)
-						redis.Set(
-							context.Background(),
-							redis.SlotEpochSubmissionCountExceeded(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId),
-							"true",
-							5*time.Minute,
-						)
-						return errors.New(errMsg)
-					}
-				}
 				currentEpochStr, _ := redis.Get(context.Background(), pkgs.CurrentEpoch)
 				if currentEpochStr == "" {
 					reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Current epochId not stored in redis: %s", err.Error()), time.Now().String(), "High")
@@ -219,6 +192,10 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 					} else if diff := uint64(currentEpoch) - details.submission.Request.EpochId; diff < 0 || diff > 1 {
 						errMsg = "Incorrect epochId supplied in request"
 					}
+				}
+				epochSubmissionExceededKey := redis.SlotEpochSubmissionCountExceeded(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
+				if val, _ := redis.Get(context.Background(), epochSubmissionExceededKey); val != "" {
+					errMsg = "Slot epoch submission count exceeded for slot ID " + strconv.FormatUint(details.submission.Request.SlotId, 10)
 				}
 			}
 			if errMsg != "" {
@@ -273,6 +250,26 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	if err := redis.RedisClient.Expire(context.Background(), epochKey, 30*time.Minute).Err(); err != nil {
 		log.Errorf("Failed to set expiry for epoch submissions hash table %s: %v", epochKey, err)
 		return fmt.Errorf("redis client failure: %s", err.Error())
+	}
+	if !isFullNode(snapshotterAddr.Hex()) {
+		slotEpochCounterKey := redis.SlotEpochSubmissionsKey(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
+		count, err := redis.Incr(context.Background(), slotEpochCounterKey)
+		if err != nil {
+			log.Errorf("Failed to increment slot epoch counter: %v", err)
+			return fmt.Errorf("redis client failure: %s", err.Error())
+		} else {
+			if count > 2 {
+				errMsg := fmt.Sprintf("Slot epoch submission count exceeded for slot ID %s", strconv.FormatUint(details.submission.Request.SlotId, 10))
+				log.Errorln("Slot epoch submission count exceeded: ", errMsg)
+				redis.Set(
+					context.Background(),
+					redis.SlotEpochSubmissionCountExceeded(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId),
+					"true",
+					5*time.Minute,
+				)
+				return errors.New(errMsg)
+			}
+		}
 	}
 	return nil
 }
