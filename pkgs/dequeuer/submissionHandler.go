@@ -193,7 +193,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			if snapshotterAddr.Hex() != slotInfo.SnapshotterAddress.Hex() {
 				errMsg = "Incorrect snapshotter address extracted" + string(snapshotterAddr.Hex()) + "for specified slot " + strconv.FormatUint(details.submission.Request.SlotId, 10) + " : " + string(slotInfo.SnapshotterAddress.Hex())
 			} else {
-				currentEpochStr, _ := redis.Get(context.Background(), pkgs.CurrentEpoch)
+				currentEpochStr, err := redis.Get(context.Background(), pkgs.CurrentEpoch)
 				if currentEpochStr == "" {
 					reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Current epochId not stored in redis: %s", err.Error()), time.Now().String(), "High")
 					log.Errorf("Current epochId not stored in redis: %s", err.Error())
