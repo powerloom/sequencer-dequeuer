@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs"
-	"sequencer-dequeuer/pkgs/contract"
+	mycontract "sequencer-dequeuer/pkgs/contract"
 	"sequencer-dequeuer/pkgs/redis"
 	"time"
 
@@ -19,7 +19,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var Instance *contract.Contract
+var Instance *mycontract.Mycontract
 
 var (
 	Client       *ethclient.Client
@@ -34,7 +34,7 @@ func ConfigureClient() {
 	Client = ethclient.NewClient(rpcClient)
 }
 func ConfigureContractInstance() {
-	Instance, _ = contract.NewContract(common.HexToAddress(config.SettingsObj.ContractAddress), Client)
+	Instance, _ = mycontract.NewMycontract(common.HexToAddress(config.SettingsObj.ContractAddress), Client)
 }
 
 func MustQuery[K any](ctx context.Context, call func() (val K, err error)) (K, error) {
@@ -54,12 +54,12 @@ func MustQuery[K any](ctx context.Context, call func() (val K, err error)) (K, e
 	return val, err
 }
 
-func getExpirationTime(epochID int64) time.Time {
+func getExpirationTime(epochID, daySize int64) time.Time {
 	// DAY_SIZE in microseconds
-	daySize := 864000000 * time.Microsecond
+	updatedDaySize := time.Duration(daySize) * time.Microsecond
 
 	// Calculate the duration of each epoch
-	epochDuration := daySize / time.Duration(epochsInADay)
+	epochDuration := updatedDaySize / time.Duration(epochsInADay)
 
 	// Calculate the number of epochs left for the day
 	remainingEpochs := epochID % int64(epochsInADay)
@@ -87,22 +87,29 @@ func FetchCurrentDay() (*big.Int, error) {
 		return currentDay, nil
 	}
 
-	// Cache miss: fetch from contract: call the `currentDay` method
+	// Cache miss: fetch from contract: call the `DayCounter` method
 	currentDay, err := Instance.DayCounter(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
 	if err != nil {
 		log.Printf("Failed to fetch current day from contract: %v", err)
 		return nil, err
 	}
 
-	// Get the current epoch
+	// Fetch the current epoch from the contract
 	currentEpoch, err := Instance.CurrentEpoch(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
 	if err != nil {
 		log.Printf("Failed to fetch current epoch from contract: %v", err)
 		return nil, err
 	}
 
+	// Fetch the day size from the contract
+	daySize, err := Instance.DAYSIZE(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
+	if err != nil {
+		log.Printf("Failed to fetch day size from contract: %v", err)
+		return nil, err
+	}
+
 	// Calculate expiration time
-	expirationTime := getExpirationTime(currentEpoch.EpochId.Int64())
+	expirationTime := getExpirationTime(currentEpoch.EpochId.Int64(), daySize.Int64())
 
 	// Set the current day in Redis with the calculated expiration duration
 	if err := redis.Set(context.Background(), pkgs.CurrentDay, currentDay.String(), time.Until(expirationTime)); err != nil {

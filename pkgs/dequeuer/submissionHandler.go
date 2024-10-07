@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs"
-	"sequencer-dequeuer/pkgs/contract"
+	mycontract "sequencer-dequeuer/pkgs/contract"
 	"sequencer-dequeuer/pkgs/prost"
 	"sequencer-dequeuer/pkgs/redis"
 	"sequencer-dequeuer/pkgs/reporting"
@@ -180,7 +180,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			log.Errorln("Could not fetch slot info from cache: ", err.Error())
 			return err
 		} else {
-			var slotInfo contract.PowerloomDataMarketSlotInfo
+			var slotInfo mycontract.PowerloomDataMarketSlotInfo
 			err = json.Unmarshal([]byte(slotInfoStr), &slotInfo)
 			if err != nil {
 				log.Errorln("Unable to unmarshal slotInfo: ", slotInfoStr)
