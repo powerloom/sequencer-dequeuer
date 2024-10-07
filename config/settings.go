@@ -41,8 +41,7 @@ func LoadConfig() {
 		log.Fatalf("Failed to parse CHAIN_ID environment variable: %v", err)
 	}
 
-	url := getEnv("SETTINGS_URL", "")
-	initialPairs, err := fetchInitialPairs(url)
+	initialPairs, err := fetchInitialPairs()
 	if err != nil {
 		log.Fatalf("Failed to fetch initial pairs: %v", err)
 	}
@@ -73,7 +72,8 @@ func getEnv(key, defaultValue string) string {
 	return value
 }
 
-func fetchInitialPairs(url string) ([]string, error) {
+func fetchInitialPairs() ([]string, error) {
+	url := getEnv("DATA_MARKET_STATIC_SOURCE_LIST", "")
 	settings, err := fetchSettingsObject(url)
 	if err != nil {
 		return nil, err
