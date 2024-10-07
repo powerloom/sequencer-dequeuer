@@ -786,6 +786,25 @@
         "type": "address"
       }
     ],
+    "name": "DAY_SIZE",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract PowerloomDataMarket",
+        "name": "dataMarket",
+        "type": "address"
+      }
+    ],
     "name": "EPOCH_SIZE",
     "outputs": [
       {
@@ -2618,6 +2637,24 @@
       }
     ],
     "name": "updateDataMarketFactory",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "contract PowerloomDataMarket",
+        "name": "dataMarket",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "newDaySize",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateDaySize",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

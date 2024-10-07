@@ -3,6 +3,7 @@ module sequencer-dequeuer
 go 1.19
 
 require (
+	github.com/alicebob/miniredis/v2 v2.33.0
 	github.com/cenkalti/backoff/v4 v4.2.0
 	github.com/ethereum/go-ethereum v1.13.12
 	github.com/go-redis/redis/v8 v8.11.5
@@ -15,7 +16,6 @@ require (
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
-	github.com/alicebob/miniredis/v2 v2.33.0 // indirect
 	github.com/bits-and-blooms/bitset v1.10.0 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/consensys/bavard v0.1.13 // indirect
