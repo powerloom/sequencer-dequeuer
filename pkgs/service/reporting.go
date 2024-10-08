@@ -3,10 +3,11 @@ package service
 import (
 	"bytes"
 	"encoding/json"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sequencer-dequeuer/pkgs/reporting"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var ReportingInstance *ReportingService
