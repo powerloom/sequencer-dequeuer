@@ -76,6 +76,7 @@ func isFullNode(addr string) bool {
 
 // TODO: Update verification logic
 func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) error {
+	// TODO: check whether the data market address is valid
 	snapshotterAddr, err := utils.RecoverAddress(utils.HashRequest(details.submission.Request), common.Hex2Bytes(details.submission.Signature))
 	// TODO: This can be an incorrect submission altogether - check need for reporting
 	if err != nil {
@@ -206,6 +207,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 						errMsg = "Incorrect epochId supplied in request"
 					}
 				}
+				// TODO: check for submission count exceeded in the current epoch for specific data market
 				epochSubmissionExceededKey := redis.SlotEpochSubmissionCountExceeded(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
 				if val, _ := redis.Get(context.Background(), epochSubmissionExceededKey); val != "" {
 					errMsg = "Slot epoch submission count exceeded for slot ID " + strconv.FormatUint(details.submission.Request.SlotId, 10)
@@ -216,41 +218,42 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 				return errors.New("invalid snapshot")
 			}
 		}
+		if config.SettingsObj.VerifySubmissionDataSourceIndex {
+			// Extract the contract address from the projectID
+			projectData := strings.Split(details.submission.Request.ProjectId, ":")
 
-		// Extract the contract address from the projectID
-		projectData := strings.Split(details.submission.Request.ProjectId, ":")
+			// Ensure there are exactly three parts
+			if len(projectData) != 3 {
+				log.Printf("unexpected format for projectID: %s", details.submission.Request.ProjectId)
+			}
 
-		// Ensure there are exactly three parts
-		if len(projectData) != 3 {
-			log.Printf("unexpected format for projectID: %s", details.submission.Request.ProjectId)
-		}
+			// Get the contract address from the project data
+			expectedContractAddr := projectData[1]
 
-		// Get the contract address from the project data
-		expectedContractAddr := projectData[1]
+			// Retrieve the initial pairs from the configuration settings
+			initialPairs := config.SettingsObj.InitialPairs
 
-		// Retrieve the initial pairs from the configuration settings
-		initialPairs := config.SettingsObj.InitialPairs
+			pairContractIndex, err := fetchPairContractIndex(
+				int64(details.submission.Request.EpochId),
+				int64(details.submission.Request.SlotId),
+				int64(len(initialPairs)),
+				snapshotterAddr,
+			)
+			if err != nil {
+				reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprint("Failed to fetch pair contract index: ", err.Error()), time.Now().String(), "High")
+				log.Error("Failed to fetch pair contract index: ", err.Error())
+			}
 
-		pairContractIndex, err := fetchPairContractIndex(
-			int64(details.submission.Request.EpochId),
-			int64(details.submission.Request.SlotId),
-			int64(len(initialPairs)),
-			snapshotterAddr,
-		)
-		if err != nil {
-			reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprint("Failed to fetch pair contract index: ", err.Error()), time.Now().String(), "High")
-			log.Error("Failed to fetch pair contract index: ", err.Error())
-		}
+			// Retrieve the contract address corresponding to the calculated pair contract index
+			fetchedContractAddr := initialPairs[pairContractIndex]
 
-		// Retrieve the contract address corresponding to the calculated pair contract index
-		fetchedContractAddr := initialPairs[pairContractIndex]
-
-		if expectedContractAddr != fetchedContractAddr {
-			log.Errorln("Mismatched pair contract index: ", err.Error())
-			return errors.New("failed to verify pair contract index")
+			if expectedContractAddr != fetchedContractAddr {
+				log.Errorln("Mismatched pair contract index: ", err.Error())
+				return errors.New("failed to verify pair contract index")
+			}
 		}
 	}
-
+	// TODO: submission keys should be separated by data market address
 	key := redis.SubmissionKey(details.submission.Request.EpochId, details.submission.Request.ProjectId, new(big.Int).SetUint64(details.submission.Request.SlotId).String())
 	value := fmt.Sprintf("%s.%s", details.submissionId.String(), protojson.Format(details.submission))
 	set := redis.SubmissionSetByHeaderKey(details.submission.Request.EpochId, details.submission.Header) //fmt.Sprintf("%s.%d.%s", CollectorKey, submission.Request.EpochId, submission.Header)

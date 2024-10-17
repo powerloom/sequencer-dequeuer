@@ -6,6 +6,8 @@ import (
 	"sequencer-dequeuer/pkgs"
 )
 
+// TODO: submission keys should be separated by data market address
+
 func FlaggedSnapshotterKey() string {
 	return pkgs.FlaggedSnapshotterKey
 }

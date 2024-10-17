@@ -15,17 +15,18 @@ import (
 var SettingsObj *Settings
 
 type Settings struct {
-	ClientUrl                 string
-	ContractAddress           string
-	RedisHost                 string
-	RedisPort                 string
-	ChainID                   int64
-	FullNodes                 []string
-	DataMarketAddress         string
-	DataMarketContractAddress common.Address
-	SlackReportingUrl         string
-	RedisDB                   string
-	InitialPairs              []string
+	ClientUrl                       string
+	ContractAddress                 string
+	RedisHost                       string
+	RedisPort                       string
+	ChainID                         int64
+	FullNodes                       []string
+	DataMarketAddress               string
+	DataMarketContractAddress       common.Address
+	VerifySubmissionDataSourceIndex bool
+	SlackReportingUrl               string
+	RedisDB                         string
+	InitialPairs                    []string
 }
 
 func LoadConfig() {
@@ -46,19 +47,26 @@ func LoadConfig() {
 		log.Fatalf("Failed to fetch initial pairs: %v", err)
 	}
 
-	config := Settings{
-		ClientUrl:         getEnv("PROST_RPC_URL", ""),
-		ContractAddress:   getEnv("PROTOCOL_STATE_CONTRACT", ""),
-		RedisHost:         getEnv("REDIS_HOST", ""),
-		RedisPort:         getEnv("REDIS_PORT", ""),
-		SlackReportingUrl: getEnv("SLACK_REPORTING_URL", ""),
-		DataMarketAddress: getEnv("DATA_MARKET_ADDRESS", ""),
-		RedisDB:           getEnv("REDIS_DB", ""),
-		FullNodes:         fullNodesList,
-		ChainID:           chainId,
-		InitialPairs:      initialPairs,
+	verifySubmissionDataSourceIndex, err := strconv.ParseBool(getEnv("VERIFY_SUBMISSION_DATA_SOURCE_INDEX", "false"))
+	if err != nil {
+		log.Fatalf("Failed to parse VERIFY_SUBMISSION_DATA_SOURCE_INDEX environment variable: %v", err)
 	}
 
+	config := Settings{
+		ClientUrl:                       getEnv("PROST_RPC_URL", ""),
+		ContractAddress:                 getEnv("PROTOCOL_STATE_CONTRACT", ""),
+		RedisHost:                       getEnv("REDIS_HOST", ""),
+		RedisPort:                       getEnv("REDIS_PORT", ""),
+		SlackReportingUrl:               getEnv("SLACK_REPORTING_URL", ""),
+		DataMarketAddress:               getEnv("DATA_MARKET_ADDRESS", ""),
+		RedisDB:                         getEnv("REDIS_DB", ""),
+		VerifySubmissionDataSourceIndex: verifySubmissionDataSourceIndex,
+		FullNodes:                       fullNodesList,
+		ChainID:                         chainId,
+		InitialPairs:                    initialPairs,
+	}
+
+	// TODO: accept an array of data market addresses
 	config.DataMarketContractAddress = common.HexToAddress(config.DataMarketAddress)
 
 	SettingsObj = &config
