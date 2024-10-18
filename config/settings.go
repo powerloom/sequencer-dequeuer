@@ -1,13 +1,13 @@
 package config
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"reflect"
 	"strconv"
-	"crypto/tls"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -23,8 +23,8 @@ type Settings struct {
 	RedisPort                       string
 	ChainID                         int64
 	FullNodes                       []string
-	DataMarketAddress               string
-	DataMarketContractAddress       common.Address
+	DataMarketAddresses             []string
+	DataMarketContractAddresses     []common.Address
 	VerifySubmissionDataSourceIndex bool
 	SlackReportingUrl               string
 	RedisDB                         string
@@ -37,6 +37,16 @@ func LoadConfig() {
 	err := json.Unmarshal([]byte(fullNodes), &fullNodesList)
 	if err != nil {
 		log.Fatalf("Failed to parse FULL_NODES environment variable: %v", err)
+	}
+
+	dataMarketAddresses := getEnv("DATA_MARKET_ADDRESSES", "[]")
+	dataMarketAddressesList := []string{}
+	err = json.Unmarshal([]byte(dataMarketAddresses), &dataMarketAddressesList)
+	if err != nil {
+		log.Fatalf("Failed to parse DATA_MARKET_ADDRESSES environment variable: %v", err)
+	}
+	if len(dataMarketAddressesList) == 0 {
+		log.Fatalf("DATA_MARKET_ADDRESSES environment variable has an empty array")
 	}
 
 	chainId, err := strconv.ParseInt(getEnv("CHAIN_ID", ""), 10, 64)
@@ -60,7 +70,7 @@ func LoadConfig() {
 		RedisHost:                       getEnv("REDIS_HOST", ""),
 		RedisPort:                       getEnv("REDIS_PORT", ""),
 		SlackReportingUrl:               getEnv("SLACK_REPORTING_URL", ""),
-		DataMarketAddress:               getEnv("DATA_MARKET_ADDRESS", ""),
+		DataMarketAddresses:             dataMarketAddressesList,
 		RedisDB:                         getEnv("REDIS_DB", ""),
 		VerifySubmissionDataSourceIndex: verifySubmissionDataSourceIndex,
 		FullNodes:                       fullNodesList,
@@ -68,8 +78,10 @@ func LoadConfig() {
 		InitialPairs:                    initialPairs,
 	}
 
-	// TODO: accept an array of data market addresses
-	config.DataMarketContractAddress = common.HexToAddress(config.DataMarketAddress)
+	// transforming to checksum addresses
+	for _, address := range config.DataMarketAddresses {
+		config.DataMarketContractAddresses = append(config.DataMarketContractAddresses, common.HexToAddress(address))
+	}
 
 	SettingsObj = &config
 }
