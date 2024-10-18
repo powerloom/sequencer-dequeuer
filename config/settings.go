@@ -7,6 +7,8 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"crypto/tls"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
@@ -96,7 +98,16 @@ func fetchInitialPairs() ([]string, error) {
 }
 
 func fetchSettingsObject(url string) (map[string]interface{}, error) {
-	resp, err := http.Get(url)
+	// Create a custom HTTP client with insecure TLS config
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
+
+	// Use the custom client to make the request
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch settings: %v", err)
 	}
