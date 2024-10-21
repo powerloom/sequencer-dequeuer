@@ -38,22 +38,9 @@ type SubmissionDetails struct {
 type SubmissionHandler struct {
 }
 
-func StartSubmissionHandler() {
-	day, err := prost.MustQuery[*big.Int](context.Background(), func() (*big.Int, error) {
-		return prost.Instance.DayCounter(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
-	})
-	if err != nil {
-		// Contract query failure - reported by MustQuery
-		log.Errorln("Encountered error while querying dayCounter: ", err.Error())
-	}
-	// TODO: Move to state manager
-	err = redis.Set(context.Background(), pkgs.SequencerDayKey, day.String(), 0)
-	if err != nil {
-		//TODO: Report on slack
-		return
-	}
-	SubmissionHandlerInstance = &SubmissionHandler{}
-	go SubmissionHandlerInstance.startSubmissionDequeuer()
+func (sh *SubmissionHandler) Start() {
+	// Implement the submission handling logic here
+	sh.startSubmissionDequeuer()
 }
 
 type SnapshotData struct {
@@ -386,6 +373,18 @@ func (s *SubmissionHandler) startSubmissionDequeuer() {
 		log.Debugln("Unmarshalled data: ", queueData)
 		if err != nil {
 			log.Errorln("Error unmarshalling queue data:", err)
+			continue
+		}
+		dataMarketAddressStr, ok := queueData["data_market_address"].(string)
+		if !ok {
+			log.Errorln("Invalid data_market_address format in queue data")
+			continue
+		}
+		dataMarketAddress := common.HexToAddress(dataMarketAddressStr)
+		log.Debugln("Data market address extracted from queue data: ", dataMarketAddress.Hex())
+		// check if the data market address is in the set of data markets
+		if !config.SettingsObj.IsValidDataMarketAddress(dataMarketAddress) {
+			log.Errorln("Data market address not in the set of data markets")
 			continue
 		}
 

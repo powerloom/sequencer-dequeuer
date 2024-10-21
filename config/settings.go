@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -29,6 +30,17 @@ type Settings struct {
 	SlackReportingUrl               string
 	RedisDB                         string
 	InitialPairs                    []string
+}
+
+// Add this new method to the Settings struct
+func (s *Settings) IsValidDataMarketAddress(address common.Address) bool {
+	lowercaseAddress := strings.ToLower(address.Hex())
+	for _, validAddress := range s.DataMarketContractAddresses {
+		if strings.ToLower(validAddress.Hex()) == lowercaseAddress {
+			return true
+		}
+	}
+	return false
 }
 
 func LoadConfig() {

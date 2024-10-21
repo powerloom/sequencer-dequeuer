@@ -24,6 +24,7 @@ func main() {
 	redis.RedisClient = redis.NewRedisClient()
 
 	wg.Add(1)
-	go dequeuer.StartSubmissionHandler()
+	dequeuer.SubmissionHandlerInstance = &dequeuer.SubmissionHandler{}
+	go dequeuer.SubmissionHandlerInstance.Start()
 	wg.Wait()
 }
