@@ -6,13 +6,10 @@ import (
 	"math/big"
 	"net/http"
 	"sequencer-dequeuer/config"
-	"sequencer-dequeuer/pkgs"
 	mycontract "sequencer-dequeuer/pkgs/contract"
-	"sequencer-dequeuer/pkgs/redis"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -78,44 +75,47 @@ func getExpirationTime(epochID, daySize int64) time.Time {
 
 // FetchCurrentDay fetches the current day from the contract and caches the result in Redis
 func FetchCurrentDay() (*big.Int, error) {
+	// TODO: change this to accomodate for multiple data markets and
+	// verify whether they support static or dynamic data source lists
+	return nil, nil
 	// Check Redis cache first
-	cachedDay, err := redis.Get(context.Background(), pkgs.CurrentDay)
-	if err == nil {
-		// Cache hit: return the cached value
-		currentDay := new(big.Int)
-		currentDay.SetString(cachedDay, 10)
-		return currentDay, nil
-	}
+	// cachedDay, err := redis.Get(context.Background(), pkgs.CurrentDay)
+	// if err == nil {
+	// 	// Cache hit: return the cached value
+	// 	currentDay := new(big.Int)
+	// 	currentDay.SetString(cachedDay, 10)
+	// 	return currentDay, nil
+	// }
 
-	// Cache miss: fetch from contract: call the `DayCounter` method
-	currentDay, err := Instance.DayCounter(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
-	if err != nil {
-		log.Printf("Failed to fetch current day from contract: %v", err)
-		return nil, err
-	}
+	// // Cache miss: fetch from contract: call the `DayCounter` method
+	// currentDay, err := Instance.DayCounter(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
+	// if err != nil {
+	// 	log.Printf("Failed to fetch current day from contract: %v", err)
+	// 	return nil, err
+	// }
 
-	// Fetch the current epoch from the contract
-	currentEpoch, err := Instance.CurrentEpoch(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
-	if err != nil {
-		log.Printf("Failed to fetch current epoch from contract: %v", err)
-		return nil, err
-	}
+	// // Fetch the current epoch from the contract
+	// currentEpoch, err := Instance.CurrentEpoch(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
+	// if err != nil {
+	// 	log.Printf("Failed to fetch current epoch from contract: %v", err)
+	// 	return nil, err
+	// }
 
-	// Fetch the day size from the contract
-	daySize, err := Instance.DAYSIZE(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
-	if err != nil {
-		log.Printf("Failed to fetch day size from contract: %v", err)
-		return nil, err
-	}
+	// // Fetch the day size from the contract
+	// daySize, err := Instance.DAYSIZE(&bind.CallOpts{}, config.SettingsObj.DataMarketContractAddress)
+	// if err != nil {
+	// 	log.Printf("Failed to fetch day size from contract: %v", err)
+	// 	return nil, err
+	// }
 
-	// Calculate expiration time
-	expirationTime := getExpirationTime(currentEpoch.EpochId.Int64(), daySize.Int64())
+	// // Calculate expiration time
+	// expirationTime := getExpirationTime(currentEpoch.EpochId.Int64(), daySize.Int64())
 
-	// Set the current day in Redis with the calculated expiration duration
-	if err := redis.Set(context.Background(), pkgs.CurrentDay, currentDay.String(), time.Until(expirationTime)); err != nil {
-		log.Printf("Failed to cache current day in Redis: %v", err)
-		return nil, err
-	}
+	// // Set the current day in Redis with the calculated expiration duration
+	// if err := redis.Set(context.Background(), pkgs.CurrentDay, currentDay.String(), time.Until(expirationTime)); err != nil {
+	// 	log.Printf("Failed to cache current day in Redis: %v", err)
+	// 	return nil, err
+	// }
 
-	return currentDay, nil
+	// return currentDay, nil
 }
