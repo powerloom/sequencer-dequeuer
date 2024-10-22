@@ -2,8 +2,6 @@ module sequencer-dequeuer
 
 go 1.22
 
-toolchain go1.23.1
-
 require (
 	github.com/alicebob/miniredis/v2 v2.33.0
 	github.com/cenkalti/backoff/v4 v4.2.0
