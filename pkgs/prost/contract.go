@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"net/http"
 	"sequencer-dequeuer/config"
-	mycontract "sequencer-dequeuer/pkgs/contract"
+	protocolStateContractABIGen "sequencer-dequeuer/pkgs/contract"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -16,7 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var Instance *mycontract.Mycontract
+var Instance *protocolStateContractABIGen.Contract
 
 var (
 	Client       *ethclient.Client
@@ -31,7 +31,7 @@ func ConfigureClient() {
 	Client = ethclient.NewClient(rpcClient)
 }
 func ConfigureContractInstance() {
-	Instance, _ = mycontract.NewMycontract(common.HexToAddress(config.SettingsObj.ContractAddress), Client)
+	Instance, _ = protocolStateContractABIGen.NewContract(common.HexToAddress(config.SettingsObj.ContractAddress), Client)
 }
 
 func MustQuery[K any](ctx context.Context, call func() (val K, err error)) (K, error) {
