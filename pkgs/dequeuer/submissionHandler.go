@@ -26,7 +26,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-// TODO: Submit Snapshots at scale
 var SubmissionHandlerInstance *SubmissionHandler
 
 // SubmissionDetails encapsulates the data needed for processing a submission
@@ -418,7 +417,7 @@ func (s *SubmissionHandler) startSubmissionDequeuer() {
 			submission:   &submission,
 		}
 
-		log.Debugln("Submission received for verification and storage:", submissionDetails.submissionId.String())
+		log.Debugln("Submission received for verification and storage with ID: ", submissionDetails.submissionId.String(), "and request: ", submissionDetails.submission.Request)
 		err = s.verifyAndStoreSubmission(submissionDetails)
 		if err != nil {
 			log.Debugln("VerifyAndStore error:", err.Error())
