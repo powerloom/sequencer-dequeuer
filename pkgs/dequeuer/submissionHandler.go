@@ -242,17 +242,25 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			}
 		}
 	}
-	// TODO: submission keys should be separated by data market address
-	key := redis.SubmissionKey(details.dataMarketAddress, details.submission.Request.EpochId, details.submission.Request.ProjectId, new(big.Int).SetUint64(details.submission.Request.SlotId).String())
+	key := redis.SubmissionKey(
+		details.dataMarketAddress,
+		details.submission.Request.EpochId,
+		details.submission.Request.ProjectId,
+		new(big.Int).SetUint64(details.submission.Request.SlotId).String(),
+	)
 	value := fmt.Sprintf("%s.%s", details.submissionId.String(), protojson.Format(details.submission))
-	set := redis.SubmissionSetByHeaderKey(details.dataMarketAddress, details.submission.Request.EpochId, details.submission.Header)
+	set := redis.SubmissionSetByHeaderKey(
+		details.dataMarketAddress,
+		details.submission.Request.EpochId,
+		details.submission.Header,
+	)
 
 	if val, _ := redis.Get(context.Background(), key); val != "" {
 		log.Debugln("Submission already exists: ", val)
 		return nil
 	}
 	if err := redis.SetSubmission(context.Background(), key, value, set, 20*time.Minute); err != nil {
-		log.Errorln("Error setting key-value pair: ", err.Error())
+		log.Errorf("Error setting submission in Redis (slot ID: %s, epoch ID: %d, project ID: %s): %s", strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId, details.submission.Request.ProjectId, err.Error())
 		return err
 	}
 
@@ -279,7 +287,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		log.Errorf("Error serializing submission: %v", err)
 		return fmt.Errorf("json marshalling error: %s", err.Error())
 	}
-
+	// this htable is the raw dump of all submissions for a given epoch and data market, expires after 30 minutes
 	epochKey := redis.EpochSubmissionsKey(details.dataMarketAddress, details.submission.Request.EpochId)
 	if err := redis.RedisClient.HSet(context.Background(), epochKey, details.submissionId.String(), submissionJSON).Err(); err != nil {
 		log.Errorf("Failed to write submission details to Redis: %v", err)
