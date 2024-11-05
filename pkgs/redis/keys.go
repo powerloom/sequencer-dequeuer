@@ -18,7 +18,7 @@ func FlaggedSnapshotterKey(dataMarketAddress string) string {
 }
 
 func SubmissionSetByHeaderKey(dataMarketAddress string, epoch uint64, header string) string {
-	return fmt.Sprintf("%s.%d.%s", strings.ToLower(dataMarketAddress), epoch, header)
+	return fmt.Sprintf("%s.%s.%d.%s", pkgs.CollectorKey, strings.ToLower(dataMarketAddress), epoch, header)
 }
 
 func SubmissionKey(dataMarketAddress string, epochId uint64, projectId, slotId string) string {
@@ -42,11 +42,11 @@ func SlotInfo(slotId string) string {
 }
 
 func EpochSubmissionsCount(dataMarketAddress string, epochId uint64) string {
-	return fmt.Sprintf("%s.%d", strings.ToLower(dataMarketAddress), epochId)
+	return fmt.Sprintf("%s.%s.%d", pkgs.EpochSubmissionsCountKey, strings.ToLower(dataMarketAddress), epochId)
 }
 
 func EpochSubmissionsKey(dataMarketAddress string, epochId uint64) string {
-	return fmt.Sprintf("%s.%d", strings.ToLower(dataMarketAddress), epochId)
+	return fmt.Sprintf("%s.%s.%d", pkgs.EpochSubmissionsKey, strings.ToLower(dataMarketAddress), epochId)
 }
 
 func SlotEpochSubmissionsKey(dataMarketAddress string, slotId string, epochId uint64) string {
@@ -70,9 +70,9 @@ func GetSnapshotterNodeVersion(dataMarketAddress string, snapshotterAddress stri
 }
 
 func SlotSubmissionSetByDay(dataMarketAddress string, day string) string {
-	return fmt.Sprintf("%s.%s.%s", strings.ToLower(dataMarketAddress), pkgs.DaySubmissionsKey, day)
+	return fmt.Sprintf("%s.%s.%s", pkgs.SlotSubmissionsKey, strings.ToLower(dataMarketAddress), day)
 }
 
 func SlotSubmissionKey(dataMarketAddress string, slotId, day string) string {
-	return fmt.Sprintf("%s.%s.%s.%s", strings.ToLower(dataMarketAddress), pkgs.SlotSubmissionsKey, day, slotId)
+	return fmt.Sprintf("%s.%s.%s.%s", pkgs.SlotSubmissionsKey, strings.ToLower(dataMarketAddress), day, slotId)
 }
