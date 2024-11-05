@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs"
-	mycontract "sequencer-dequeuer/pkgs/contract"
+	protocolStateABIGen "sequencer-dequeuer/pkgs/contract"
 	"sequencer-dequeuer/pkgs/prost"
 	"sequencer-dequeuer/pkgs/redis"
 	"sequencer-dequeuer/pkgs/reporting"
@@ -30,8 +30,9 @@ var SubmissionHandlerInstance *SubmissionHandler
 
 // SubmissionDetails encapsulates the data needed for processing a submission
 type SubmissionDetails struct {
-	submissionId uuid.UUID
-	submission   *pkgs.SnapshotSubmission
+	submissionId      uuid.UUID
+	submission        *pkgs.SnapshotSubmission
+	dataMarketAddress string
 }
 
 type SubmissionHandler struct {
@@ -71,15 +72,15 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	}
 
 	// Verify if the snapshotter address is included in the set of flagged accounts in Redis
-	flaggedSnapshotterKey := redis.FlaggedSnapshotterKey()
+	flaggedSnapshotterKey := redis.FlaggedSnapshotterKey(details.dataMarketAddress)
 	isFlagged, err := redis.RedisClient.SIsMember(context.Background(), flaggedSnapshotterKey, snapshotterAddr.Hex()).Result()
 	if err != nil {
-		log.Errorf("Error querying Redis for flagged snapshotters: %v", err)
+		log.Errorf("Error querying Redis for flagged snapshotters for data market %s: %v", details.dataMarketAddress, err)
 		return fmt.Errorf("redis query error: %s", err.Error())
 	}
 
 	if isFlagged {
-		log.Debugln("Submission from flagged snapshotter: ", snapshotterAddr.Hex())
+		log.Debugf("Submission from flagged snapshotter for data market %s: %s", details.dataMarketAddress, snapshotterAddr.Hex())
 		return fmt.Errorf("snapshot submission rejected: snapshotter %s is flagged", snapshotterAddr.Hex())
 	}
 
@@ -102,7 +103,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			return fmt.Errorf("snapshotter address not the one configured in slot: %s", snapshotterAddr.Hex())
 		}
 
-		key := redis.GetSnapshotterSubmissionCountInSlot(snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
+		key := redis.GetSnapshotterSubmissionCountInSlot(details.dataMarketAddress, snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
 		err = redis.RedisClient.Incr(context.Background(), key).Err()
 		if err != nil {
 			log.Errorf("Failed to increment in Redis: %v", err.Error())
@@ -121,7 +122,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			nodeVersion = projectData[len(projectData)-1]
 		}
 
-		key = redis.GetSnapshotterNodeVersion(snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
+		key = redis.GetSnapshotterNodeVersion(details.dataMarketAddress, snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
 
 		// Setting the node version in Redis
 		err = redis.RedisClient.Set(context.Background(), key, nodeVersion, 0).Err()
@@ -145,7 +146,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			return fmt.Errorf("json marshalling error: %s", err.Error())
 		}
 
-		key = redis.GetSnapshotterSlotSubmissionsHtable(snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
+		key = redis.GetSnapshotterSlotSubmissionsHtable(details.dataMarketAddress, snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
 		if err := redis.RedisClient.HSet(context.Background(), key, details.submission.Request.EpochId, jsonData).Err(); err != nil {
 			log.Errorf("Failed to write to Redis: %v", err)
 			return fmt.Errorf("redis client failure: %s", err.Error())
@@ -167,7 +168,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			log.Errorln("Could not fetch slot info from cache: ", err.Error())
 			return err
 		} else {
-			var slotInfo mycontract.PowerloomDataMarketSlotInfo
+			var slotInfo protocolStateABIGen.PowerloomDataMarketSlotInfo
 			err = json.Unmarshal([]byte(slotInfoStr), &slotInfo)
 			if err != nil {
 				log.Errorln("Unable to unmarshal slotInfo: ", slotInfoStr)
@@ -180,7 +181,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			if snapshotterAddr.Hex() != slotInfo.SnapshotterAddress.Hex() {
 				errMsg = "Incorrect snapshotter address extracted" + string(snapshotterAddr.Hex()) + "for specified slot " + strconv.FormatUint(details.submission.Request.SlotId, 10) + " : " + string(slotInfo.SnapshotterAddress.Hex())
 			} else {
-				currentEpochStr, err := redis.Get(context.Background(), pkgs.CurrentEpoch)
+				currentEpochStr, err := redis.Get(context.Background(), redis.CurrentEpoch(snapshotterAddr.Hex()))
 				if currentEpochStr == "" {
 					reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Current epochId not stored in redis: %s", err.Error()), time.Now().String(), "High")
 					log.Errorf("Current epochId not stored in redis: %s", err.Error())
@@ -194,7 +195,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 					}
 				}
 				// TODO: check for submission count exceeded in the current epoch for specific data market
-				epochSubmissionExceededKey := redis.SlotEpochSubmissionCountExceeded(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
+				epochSubmissionExceededKey := redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
 				if val, _ := redis.Get(context.Background(), epochSubmissionExceededKey); val != "" {
 					errMsg = "Slot epoch submission count exceeded for slot ID " + strconv.FormatUint(details.submission.Request.SlotId, 10)
 				}
@@ -240,9 +241,9 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		}
 	}
 	// TODO: submission keys should be separated by data market address
-	key := redis.SubmissionKey(details.submission.Request.EpochId, details.submission.Request.ProjectId, new(big.Int).SetUint64(details.submission.Request.SlotId).String())
+	key := redis.SubmissionKey(details.dataMarketAddress, details.submission.Request.EpochId, details.submission.Request.ProjectId, new(big.Int).SetUint64(details.submission.Request.SlotId).String())
 	value := fmt.Sprintf("%s.%s", details.submissionId.String(), protojson.Format(details.submission))
-	set := redis.SubmissionSetByHeaderKey(details.submission.Request.EpochId, details.submission.Header) //fmt.Sprintf("%s.%d.%s", CollectorKey, submission.Request.EpochId, submission.Header)
+	set := redis.SubmissionSetByHeaderKey(details.dataMarketAddress, details.submission.Request.EpochId, details.submission.Header)
 
 	if val, _ := redis.Get(context.Background(), key); val != "" {
 		log.Debugln("Submission already exists: ", val)
@@ -264,7 +265,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	}
 
 	// Store increment submission count for this epoch
-	err = redis.RedisClient.Incr(context.Background(), redis.EpochSubmissionsCount(details.submission.Request.EpochId)).Err()
+	err = redis.RedisClient.Incr(context.Background(), redis.EpochSubmissionsCount(details.dataMarketAddress, details.submission.Request.EpochId)).Err()
 	if err != nil {
 		reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Error incrementing epochsubmissions: %v", err), time.Now().String(), "High")
 		log.Errorf("Error incrementing epochsubmissions: %v", err)
@@ -277,7 +278,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		return fmt.Errorf("json marshalling error: %s", err.Error())
 	}
 
-	epochKey := redis.EpochSubmissionsKey(details.submission.Request.EpochId)
+	epochKey := redis.EpochSubmissionsKey(details.dataMarketAddress, details.submission.Request.EpochId)
 	if err := redis.RedisClient.HSet(context.Background(), epochKey, details.submissionId.String(), submissionJSON).Err(); err != nil {
 		log.Errorf("Failed to write submission details to Redis: %v", err)
 		return fmt.Errorf("redis client failure: %s", err.Error())
@@ -287,7 +288,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		return fmt.Errorf("redis client failure: %s", err.Error())
 	}
 	if !isFullNode(snapshotterAddr.Hex()) {
-		slotEpochCounterKey := redis.SlotEpochSubmissionsKey(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
+		slotEpochCounterKey := redis.SlotEpochSubmissionsKey(details.dataMarketAddress, strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
 		count, err := redis.Incr(context.Background(), slotEpochCounterKey)
 		if err != nil {
 			log.Errorf("Failed to increment slot epoch counter: %v", err)
@@ -298,7 +299,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 				log.Errorln("Slot epoch submission count exceeded: ", errMsg)
 				redis.Set(
 					context.Background(),
-					redis.SlotEpochSubmissionCountExceeded(strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId),
+					redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId),
 					"true",
 					5*time.Minute,
 				)
@@ -413,8 +414,9 @@ func (s *SubmissionHandler) startSubmissionDequeuer() {
 		}
 
 		submissionDetails := SubmissionDetails{
-			submissionId: submissionId,
-			submission:   &submission,
+			submissionId:      submissionId,
+			submission:        &submission,
+			dataMarketAddress: dataMarketAddressStr,
 		}
 
 		log.Debugln("Submission received for verification and storage with ID: ", submissionDetails.submissionId.String(), "and request: ", submissionDetails.submission.Request)
