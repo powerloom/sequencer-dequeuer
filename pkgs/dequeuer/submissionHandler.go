@@ -184,8 +184,9 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 				currentEpochStr, _ := redis.Get(context.Background(), redis.CurrentEpoch(details.dataMarketAddress))
 				log.Debugf("Current epoch for data market %s: %s", details.dataMarketAddress, currentEpochStr)
 				if currentEpochStr == "" {
-					reporting.SendFailureNotification("verifyAndStoreSubmission", "Current epochId not stored in redis", time.Now().String(), "High")
-					log.Errorf("Current epochId not stored in redis for data market %s encountered while processing submission by snapshotter %s, epoch %d", details.dataMarketAddress, snapshotterAddr.Hex(), details.submission.Request.EpochId)
+					errMsg = fmt.Sprintf("Current epochId not stored in redis for data market %s encountered while processing submission by snapshotter %s, epoch %d", details.dataMarketAddress, snapshotterAddr.Hex(), details.submission.Request.EpochId)
+					reporting.SendFailureNotification("verifyAndStoreSubmission", errMsg, time.Now().String(), "High")
+					log.Errorf(errMsg)
 				} else {
 					currentEpoch, err := strconv.Atoi(currentEpochStr)
 					if err != nil {
