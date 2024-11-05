@@ -181,10 +181,11 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			if snapshotterAddr.Hex() != slotInfo.SnapshotterAddress.Hex() {
 				errMsg = "Incorrect snapshotter address extracted" + string(snapshotterAddr.Hex()) + "for specified slot " + strconv.FormatUint(details.submission.Request.SlotId, 10) + " : " + string(slotInfo.SnapshotterAddress.Hex())
 			} else {
-				currentEpochStr, err := redis.Get(context.Background(), redis.CurrentEpoch(snapshotterAddr.Hex()))
+				currentEpochStr, _ := redis.Get(context.Background(), redis.CurrentEpoch(details.dataMarketAddress))
+				log.Debugf("Current epoch for data market %s: %s", details.dataMarketAddress, currentEpochStr)
 				if currentEpochStr == "" {
-					reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprintf("Current epochId not stored in redis: %s", err.Error()), time.Now().String(), "High")
-					log.Errorf("Current epochId not stored in redis: %s", err.Error())
+					reporting.SendFailureNotification("verifyAndStoreSubmission", "Current epochId not stored in redis", time.Now().String(), "High")
+					log.Errorf("Current epochId not stored in redis for data market %s encountered while processing submission by snapshotter %s, epoch %d", details.dataMarketAddress, snapshotterAddr.Hex(), details.submission.Request.EpochId)
 				} else {
 					currentEpoch, err := strconv.Atoi(currentEpochStr)
 					if err != nil {
