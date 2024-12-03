@@ -300,6 +300,11 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	if !isFullNode(snapshotterAddr.Hex()) {
 		slotEpochCounterKey := redis.SlotEpochSubmissionsKey(details.dataMarketAddress, strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
 		count, err := redis.Incr(context.Background(), slotEpochCounterKey)
+		// expire in 5 minutes
+		if err := redis.RedisClient.Expire(context.Background(), slotEpochCounterKey, 5*time.Minute).Err(); err != nil {
+			log.Errorf("Failed to set expiry for slot epoch counter %s: %v", slotEpochCounterKey, err)
+			return fmt.Errorf("redis client failure: %s", err.Error())
+		}
 		if err != nil {
 			log.Errorf("Failed to increment slot epoch counter: %v", err)
 			return fmt.Errorf("redis client failure: %s", err.Error())
