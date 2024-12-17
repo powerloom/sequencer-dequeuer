@@ -353,23 +353,32 @@ func getSnapshotterHash(snapshotAddr common.Address) *big.Int {
 func fetchPairContractIndex(epochID, slotID, size int64, snapshotterAddr common.Address) (int64, error) {
 	// Calculate snapshotter hash
 	snapshotterHash := getSnapshotterHash(snapshotterAddr)
+	if snapshotterHash == nil {
+		return 0, errors.New("failed to calculate snapshotter hash")
+	}
 
 	// Fetch current day
 	currentDay, err := prost.FetchCurrentDay()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to fetch current day: %w", err)
+	}
+	if currentDay == nil {
+		return 0, errors.New("currentDay is nil")
 	}
 
 	// Initialize a total variable for the calculation
 	calculationSum := new(big.Int)
 
 	// Perform the addition
-	calculationSum.
-		Add(big.NewInt(epochID), snapshotterHash). // Add epochID and snapshotterHash
-		Add(calculationSum, big.NewInt(slotID)).   // Add slotID to the result
-		Add(calculationSum, currentDay)            // Add currentDay to the result
+	calculationSum.Add(big.NewInt(epochID), snapshotterHash)
+	calculationSum.Add(calculationSum, big.NewInt(slotID))
+	calculationSum.Add(calculationSum, currentDay)
 
 	// Calculate contract index based on the size of initial pairs
+	if size == 0 {
+		return 0, errors.New("size parameter cannot be zero to avoid division by zero")
+	}
+
 	calculatedPairIndex := new(big.Int).Mod(calculationSum, big.NewInt(size)).Int64()
 
 	return calculatedPairIndex, nil
