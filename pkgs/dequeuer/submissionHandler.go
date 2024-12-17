@@ -207,6 +207,8 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 				return errors.New("invalid snapshot")
 			}
 		}
+
+		log.Debugln("VerifySubmissionDataSourceIndex bool check: ", config.SettingsObj.VerifySubmissionDataSourceIndex)
 		if config.SettingsObj.VerifySubmissionDataSourceIndex {
 			// Extract the contract address from the projectID
 			projectData := strings.Split(details.submission.Request.ProjectId, ":")
