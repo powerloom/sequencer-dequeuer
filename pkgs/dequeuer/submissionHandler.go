@@ -208,11 +208,9 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			}
 		}
 
-		log.Debugln("VerifySubmissionDataSourceIndex bool check: ", config.SettingsObj.VerifySubmissionDataSourceIndex)
 		if config.SettingsObj.VerifySubmissionDataSourceIndex {
 			// Extract the contract address from the projectID
 			projectData := strings.Split(details.submission.Request.ProjectId, ":")
-			log.Debugln("Data source index verification started: Project data: ", projectData, " slot ID: ", details.submission.Request.SlotId)
 
 			// Ensure there are exactly three parts
 			if len(projectData) != 3 {
@@ -221,7 +219,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 			// Get the contract address from the project data
 			expectedContractAddr := projectData[1]
-			log.Debugln("Expected contract address: ", expectedContractAddr, " slot ID: ", details.submission.Request.SlotId)
 
 			// Retrieve the initial pairs from the configuration settings
 			initialPairs := config.SettingsObj.InitialPairs
@@ -234,7 +231,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 				snapshotterAddr,
 			)
 
-			log.Debugln("Pair contract index: ", pairContractIndex, " slot ID: ", details.submission.Request.SlotId)
 			if err != nil {
 				reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprint("Failed to fetch pair contract index: ", err.Error()), time.Now().String(), "High")
 				log.Error("Failed to fetch pair contract index: ", err.Error())
@@ -242,8 +238,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 			// Retrieve the contract address corresponding to the calculated pair contract index
 			fetchedContractAddr := initialPairs[pairContractIndex]
-
-			log.Debugln("Fetched contract address from initial pairs: ", fetchedContractAddr, " slot ID: ", details.submission.Request.SlotId)
 
 			if expectedContractAddr != fetchedContractAddr {
 				log.Errorf(
