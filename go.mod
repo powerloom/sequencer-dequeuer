@@ -50,10 +50,10 @@ require (
 	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/prometheus/client_golang v1.18.0 // indirect
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/crypto v0.22.0 // indirect
+	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a // indirect
 	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.22.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
 )
 
 replace github.com/ethereum/go-ethereum v1.14.7 => github.com/PowerLoom/go-ethereum v1.14.7-unsupported-tx-final
