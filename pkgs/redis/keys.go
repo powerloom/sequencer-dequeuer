@@ -4,100 +4,75 @@ import (
 	"fmt"
 	"math/big"
 	"sequencer-dequeuer/pkgs"
+	"strings"
 )
 
-func SubmissionSetByHeaderKey(epoch uint64, header string) string {
-	return fmt.Sprintf("%s.%d.%s", pkgs.CollectorKey, epoch, header)
+// TODO: submission keys should be separated by data market address
+
+func CurrentEpoch(dataMarketAddress string) string {
+	return fmt.Sprintf("%s.%s", strings.ToLower(dataMarketAddress), pkgs.CurrentEpoch)
 }
 
-func SubmissionKey(epochId uint64, projectId, slotId string) string {
-	return fmt.Sprintf("%d.%s.%s", epochId, projectId, slotId)
+func FlaggedSnapshotterKey(dataMarketAddress string) string {
+	return fmt.Sprintf("%s.%s", strings.ToLower(dataMarketAddress), pkgs.FlaggedSnapshotterKey)
+}
+
+func SubmissionSetByHeaderKey(dataMarketAddress string, epoch uint64, header string) string {
+	return fmt.Sprintf("%s.%s.%d.%s", pkgs.CollectorKey, strings.ToLower(dataMarketAddress), epoch, header)
+}
+
+func SubmissionKey(dataMarketAddress string, epochId uint64, projectId, slotId string) string {
+	return fmt.Sprintf("%s.%d.%s.%s", strings.ToLower(dataMarketAddress), epochId, projectId, slotId)
 }
 
 func ContractStateVariable(varName string) string {
 	return fmt.Sprintf("ProtocolState.%s", varName)
 }
 
-func SlotEpochSubmissionCountExceeded(slotId string, epochId uint64) string {
-	return fmt.Sprintf("SlotEpochSubmissionCountExceeded.%s.%d", slotId, epochId)
+func ContractStateVariableWithDataMarketAddress(dataMarketAddress string, varName string) string {
+	return fmt.Sprintf("ProtocolState.%s.%s", strings.ToLower(dataMarketAddress), varName)
+}
+
+func SlotEpochSubmissionCountExceeded(dataMarketAddress string, slotId string, epochId uint64) string {
+	return fmt.Sprintf("SlotEpochSubmissionCountExceeded.%s.%s.%d", strings.ToLower(dataMarketAddress), slotId, epochId)
 }
 
 func SlotInfo(slotId string) string {
 	return fmt.Sprintf("%s.%s", ContractStateVariable("SlotInfo"), slotId)
 }
 
-func EpochSubmissionsCount(epochId uint64) string {
-	return fmt.Sprintf("%s.%d", pkgs.EpochSubmissionsCountKey, epochId)
+func EpochSubmissionsCount(dataMarketAddress string, epochId uint64) string {
+	return fmt.Sprintf("%s.%s.%d", pkgs.EpochSubmissionsCountKey, strings.ToLower(dataMarketAddress), epochId)
 }
 
-func EpochSubmissionsKey(epochId uint64) string {
-	return fmt.Sprintf("%s.%d", pkgs.EpochSubmissionsKey, epochId)
+func EpochSubmissionsKey(dataMarketAddress string, epochId uint64) string {
+	return fmt.Sprintf("%s.%s.%d", pkgs.EpochSubmissionsKey, strings.ToLower(dataMarketAddress), epochId)
 }
 
-func SlotEpochSubmissionsKey(slotId string, epochId uint64) string {
-	return fmt.Sprintf("SlotEpochCounter.%s.%d", slotId, epochId)
+func SlotEpochSubmissionsKey(dataMarketAddress string, slotId string, epochId uint64) string {
+	return fmt.Sprintf("SlotEpochCounter.%s.%s.%d", strings.ToLower(dataMarketAddress), slotId, epochId)
 }
 
 func TriggeredProcessLog(process, identifier string) string {
 	return fmt.Sprintf("%s.%s.%s", pkgs.ProcessTriggerKey, process, identifier)
 }
 
-func BatchSubmissionSetByEpoch(epochId string) string {
-	return fmt.Sprintf("%s.%s", pkgs.TxsKey, epochId)
+func GetSnapshotterSlotSubmissionsHtable(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
+	return fmt.Sprintf("snapshotter:%s:%s:%d:slot_submissions", strings.ToLower(dataMarketAddress), strings.ToLower(snapshotterAddress), slotID)
 }
 
-func BatchSubmissionKey(batchId string, nonce string) string {
-	return fmt.Sprintf("%s.%s", batchId, nonce)
+func GetSnapshotterSubmissionCountInSlot(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
+	return fmt.Sprintf("snapshotter:%s:%s:%d:submission_count", strings.ToLower(dataMarketAddress), strings.ToLower(snapshotterAddress), slotID)
 }
 
-func RewardUpdateSetByDay(day string) string {
-	return fmt.Sprintf("%s.%s", pkgs.RewardTxKey, day)
+func GetSnapshotterNodeVersion(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
+	return fmt.Sprintf("snapshotter:%s:%s:%d:node_version", strings.ToLower(dataMarketAddress), strings.ToLower(snapshotterAddress), slotID)
 }
 
-func RewardTxSlots(tx string) string {
-	return fmt.Sprintf("%s.%s", tx, "Slots")
+func SlotSubmissionSetByDay(dataMarketAddress string, day string) string {
+	return fmt.Sprintf("%s.%s.%s", pkgs.SlotSubmissionsKey, strings.ToLower(dataMarketAddress), day)
 }
 
-func RewardTxSubmissions(tx string) string {
-	return fmt.Sprintf("%s.%s", tx, "Submissions")
-}
-
-func TimeSlotPreferenceKey(slotId string) string {
-	return fmt.Sprintf("%s.%s", pkgs.TimeSlotKey, slotId)
-}
-
-func GetSnapshotterSlotSubmissionsHtable(snapshotterAddress string, slotID *big.Int) string {
-	return fmt.Sprintf("snapshotter:%s:%d:slot_submissions", snapshotterAddress, slotID)
-}
-
-func GetSnapshotterSubmissionCountInSlot(snapshotterAddress string, slotID *big.Int) string {
-	return fmt.Sprintf("snapshotter:%s:%d:submission_count", snapshotterAddress, slotID)
-}
-
-func GetSnapshotterNodeVersion(snapshotterAddress string, slotID *big.Int) string {
-	return fmt.Sprintf("snapshotter:%s:%d:node_version", snapshotterAddress, slotID)
-}
-
-func SlotSubmissionSetByDay(day string) string {
-	return fmt.Sprintf("%s.%s", pkgs.DaySubmissionsKey, day)
-}
-
-func SlotSubmissionKey(slotId, day string) string {
-	return fmt.Sprintf("%s.%s.%s", pkgs.SlotSubmissionsKey, day, slotId)
-}
-
-func SlotRewardsForDay(day string, slotId string) string {
-	return fmt.Sprintf("%s.%s.%s", pkgs.DailyRewardPointsKey, day, slotId)
-}
-
-func TotalSlotRewards(slotId string) string {
-	return fmt.Sprintf("%s.%s", pkgs.TotalRewardPointsKey, slotId)
-}
-
-func LatestDailyTaskCompletion(slotId string) string {
-	return fmt.Sprintf("%s.%s", pkgs.TaskCompletionKey, slotId)
-}
-
-func SlotStreakCounter(slotId string) string {
-	return fmt.Sprintf("%s.%s", pkgs.SlotStreakKey, slotId)
+func SlotSubmissionKey(dataMarketAddress string, slotId, day string) string {
+	return fmt.Sprintf("%s.%s.%s.%s", pkgs.SlotSubmissionsKey, strings.ToLower(dataMarketAddress), day, slotId)
 }

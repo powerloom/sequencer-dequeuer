@@ -2,14 +2,15 @@ package utils
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/crypto"
-	types "github.com/ethereum/go-ethereum/signer/core/apitypes"
 	"math/big"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs"
 	"strconv"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/crypto"
+	types "github.com/ethereum/go-ethereum/signer/core/apitypes"
 )
 
 // EIP712Domain represents the EIP-712 domain details
@@ -73,7 +74,7 @@ func RecoverAddress(msgHash, signature []byte) (common.Address, error) {
 	}
 	signature[64] -= 27
 
-	pubKeyRaw, err := crypto.Ecrecover(msgHash, signature)
+	pubKeyRaw, _ := crypto.Ecrecover(msgHash, signature)
 
 	pubKey, err := crypto.UnmarshalPubkey(pubKeyRaw)
 	if err != nil {
