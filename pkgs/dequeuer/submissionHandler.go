@@ -227,6 +227,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			initialPairs := config.SettingsObj.InitialPairs
 
 			pairContractIndex, err := fetchPairContractIndex(
+				details.dataMarketAddress,
 				int64(details.submission.Request.EpochId),
 				int64(details.submission.Request.SlotId),
 				int64(len(initialPairs)),
@@ -350,7 +351,7 @@ func getSnapshotterHash(snapshotAddr common.Address) *big.Int {
 	return snapshotterHashBigInt
 }
 
-func fetchPairContractIndex(epochID, slotID, size int64, snapshotterAddr common.Address) (int64, error) {
+func fetchPairContractIndex(dataMarketAddress string, epochID, slotID, size int64, snapshotterAddr common.Address) (int64, error) {
 	// Calculate snapshotter hash
 	snapshotterHash := getSnapshotterHash(snapshotterAddr)
 	if snapshotterHash == nil {
@@ -358,7 +359,7 @@ func fetchPairContractIndex(epochID, slotID, size int64, snapshotterAddr common.
 	}
 
 	// Fetch current day
-	currentDay, err := prost.FetchCurrentDay()
+	currentDay, err := prost.FetchCurrentDay(dataMarketAddress)
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch current day: %w", err)
 	}

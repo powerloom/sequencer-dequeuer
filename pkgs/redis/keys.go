@@ -76,3 +76,7 @@ func SlotSubmissionSetByDay(dataMarketAddress string, day string) string {
 func SlotSubmissionKey(dataMarketAddress string, slotId, day string) string {
 	return fmt.Sprintf("%s.%s.%s.%s", pkgs.SlotSubmissionsKey, strings.ToLower(dataMarketAddress), day, slotId)
 }
+
+func DataMarketCurrentDay(dataMarketAddress string) string {
+	return fmt.Sprintf("%s.%s", strings.ToLower(dataMarketAddress), pkgs.CurrentDay)
+}
