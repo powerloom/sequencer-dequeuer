@@ -85,16 +85,16 @@ func TestPairContractIndexCalculation(t *testing.T) {
 	snapshotterAddr := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678")
 
 	// Mocked return values for the function inputs
-	snapshotterHash := getSnapshotterHash(snapshotterAddr) // Assume this hash is calculated correctly
-	fmt.Println("Snapshotter hash is: ", snapshotterHash)
+	snapshotterIntVal := getSnapshotterIntValue(snapshotterAddr) // Assume this hash is calculated correctly
+	fmt.Println("Snapshotter hash is: ", snapshotterIntVal)
 
 	currentDay := big.NewInt(40) // Mocked value for current day
 
 	// Step-by-step manual calculation for expected result
 	calculationSum := new(big.Int)
-	calculationSum.Add(big.NewInt(epochID), snapshotterHash) // Add epochID and snapshotterHash
-	calculationSum.Add(calculationSum, big.NewInt(slotID))   // Add slotID to the result
-	calculationSum.Add(calculationSum, currentDay)           // Add currentDay to the result
+	calculationSum.Add(big.NewInt(epochID), snapshotterIntVal) // Add epochID and snapshotterIntVal
+	calculationSum.Add(calculationSum, big.NewInt(slotID))     // Add slotID to the result
+	calculationSum.Add(calculationSum, currentDay)             // Add currentDay to the result
 
 	// Calculate contract index based on the size of initial pairs
 	pairContractIndex := new(big.Int).Mod(calculationSum, big.NewInt(size)).Int64()

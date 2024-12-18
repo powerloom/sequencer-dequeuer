@@ -17,6 +17,12 @@ import (
 
 var SettingsObj *Settings
 
+type DataMarketConfig struct {
+	Address        string `json:"address"`
+	DataSourcesUrl string `json:"dataSourcesUrl"`
+	ListKey        string `json:"listKey"`
+}
+
 type Settings struct {
 	ClientUrl                       string
 	ContractAddress                 string
@@ -25,7 +31,7 @@ type Settings struct {
 	ChainID                         int64
 	FullNodes                       []string
 	DataMarketAddresses             []string
-	DataMarketContractAddresses     []common.Address
+	DataMarketAddressesConfig       []DataMarketConfig
 	VerifySubmissionDataSourceIndex bool
 	SlackReportingUrl               string
 	RedisDB                         string
@@ -35,8 +41,8 @@ type Settings struct {
 // Add this new method to the Settings struct
 func (s *Settings) IsValidDataMarketAddress(address common.Address) bool {
 	lowercaseAddress := strings.ToLower(address.Hex())
-	for _, validAddress := range s.DataMarketContractAddresses {
-		if strings.ToLower(validAddress.Hex()) == lowercaseAddress {
+	for _, validAddress := range s.DataMarketAddresses {
+		if strings.ToLower(validAddress) == lowercaseAddress {
 			return true
 		}
 	}
@@ -51,14 +57,21 @@ func LoadConfig() {
 		log.Fatalf("Failed to parse FULL_NODES environment variable: %v", err)
 	}
 
-	dataMarketAddresses := getEnv("DATA_MARKET_ADDRESSES", "[]")
-	dataMarketAddressesList := []string{}
-	err = json.Unmarshal([]byte(dataMarketAddresses), &dataMarketAddressesList)
+	// Parse the new config format
+	dataMarketAddressesConfig := getEnv("DATA_MARKET_ADDRESSES_CONFIG", "[]")
+	var dataMarketConfigList []DataMarketConfig
+	err = json.Unmarshal([]byte(dataMarketAddressesConfig), &dataMarketConfigList)
 	if err != nil {
-		log.Fatalf("Failed to parse DATA_MARKET_ADDRESSES environment variable: %v", err)
+		log.Fatalf("Failed to parse DATA_MARKET_ADDRESSES_CONFIG environment variable: %v", err)
 	}
-	if len(dataMarketAddressesList) == 0 {
-		log.Fatalf("DATA_MARKET_ADDRESSES environment variable has an empty array")
+	if len(dataMarketConfigList) == 0 {
+		log.Fatalf("DATA_MARKET_ADDRESSES_CONFIG environment variable has an empty array")
+	}
+
+	// Extract addresses from config
+	var dataMarketAddressesList []string
+	for _, config := range dataMarketConfigList {
+		dataMarketAddressesList = append(dataMarketAddressesList, config.Address)
 	}
 
 	chainId, err := strconv.ParseInt(getEnv("CHAIN_ID", ""), 10, 64)
@@ -83,16 +96,12 @@ func LoadConfig() {
 		RedisPort:                       getEnv("REDIS_PORT", ""),
 		SlackReportingUrl:               getEnv("SLACK_REPORTING_URL", ""),
 		DataMarketAddresses:             dataMarketAddressesList,
+		DataMarketAddressesConfig:       dataMarketConfigList,
 		RedisDB:                         getEnv("REDIS_DB", ""),
 		VerifySubmissionDataSourceIndex: verifySubmissionDataSourceIndex,
 		FullNodes:                       fullNodesList,
 		ChainID:                         chainId,
 		InitialPairs:                    initialPairs,
-	}
-
-	// transforming to checksum addresses
-	for _, address := range config.DataMarketAddresses {
-		config.DataMarketContractAddresses = append(config.DataMarketContractAddresses, common.HexToAddress(address))
 	}
 
 	SettingsObj = &config
@@ -107,18 +116,23 @@ func getEnv(key, defaultValue string) string {
 }
 
 func fetchInitialPairs() ([]string, error) {
-	url := getEnv("DATA_MARKET_STATIC_SOURCE_LIST", "")
-	settings, err := fetchSettingsObject(url)
-	if err != nil {
-		return nil, err
+	var allPairs []string
+
+	for _, config := range SettingsObj.DataMarketAddressesConfig {
+		settings, err := fetchSettingsObject(config.DataSourcesUrl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch settings for %s: %v", config.Address, err)
+		}
+
+		pairs, err := interfaceToStringSlice(settings[config.ListKey])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse pairs for %s: %v", config.Address, err)
+		}
+
+		allPairs = append(allPairs, pairs...)
 	}
 
-	initialPairs, err := interfaceToStringSlice(settings["initial_pairs"])
-	if err != nil {
-		return nil, err
-	}
-
-	return initialPairs, nil
+	return allPairs, nil
 }
 
 func fetchSettingsObject(url string) (map[string]interface{}, error) {

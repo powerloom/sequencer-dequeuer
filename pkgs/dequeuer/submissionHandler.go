@@ -20,7 +20,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -179,14 +178,17 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			// AllSnapshotters state check to be added
 			var errMsg string
 			if snapshotterAddr.Hex() != slotInfo.SnapshotterAddress.Hex() {
-				errMsg = "Incorrect snapshotter address extracted" + string(snapshotterAddr.Hex()) + "for specified slot " + strconv.FormatUint(details.submission.Request.SlotId, 10) + " : " + string(slotInfo.SnapshotterAddress.Hex())
+				errMsg = fmt.Sprintf("Incorrect snapshotter address extracted %s for specified slot %d: %s",
+					snapshotterAddr.Hex(),
+					details.submission.Request.SlotId,
+					slotInfo.SnapshotterAddress.Hex())
 			} else {
 				currentEpochStr, _ := redis.Get(context.Background(), redis.CurrentEpoch(details.dataMarketAddress))
 				log.Debugf("Current epoch for data market %s: %s", details.dataMarketAddress, currentEpochStr)
 				if currentEpochStr == "" {
 					errMsg = fmt.Sprintf("Current epochId not stored in redis for data market %s encountered while processing submission by snapshotter %s, epoch %d", details.dataMarketAddress, snapshotterAddr.Hex(), details.submission.Request.EpochId)
 					reporting.SendFailureNotification("verifyAndStoreSubmission", errMsg, time.Now().String(), "High")
-					log.Errorf(errMsg)
+					log.Error(errMsg)
 				} else {
 					currentEpoch, err := strconv.Atoi(currentEpochStr)
 					if err != nil {
@@ -335,27 +337,20 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	return nil
 }
 
-func getSnapshotterHash(snapshotAddr common.Address) *big.Int {
+func getSnapshotterIntValue(snapshotAddr common.Address) *big.Int {
 	// Convert the address into a lower case string
 	snapshotterAddrString := strings.ToLower(snapshotAddr.String())
 
 	// Convert the hexadecimal string to an integer (base 16)
 	intVal := new(big.Int)
 	intVal.SetString(snapshotterAddrString[2:], 16)
-
-	// Calculate snapshotter hash using Keccak256 algorithm
-	snapshotterHash := crypto.Keccak256(intVal.Bytes())
-
-	// Convert snapshotterHash (byte slice) to big.Int
-	snapshotterHashBigInt := new(big.Int).SetBytes(snapshotterHash)
-
-	return snapshotterHashBigInt
+	return intVal
 }
 
 func fetchPairContractIndex(dataMarketAddress string, epochID, slotID, size int64, snapshotterAddr common.Address) (int64, error) {
 	// Calculate snapshotter hash
-	snapshotterHash := getSnapshotterHash(snapshotterAddr)
-	if snapshotterHash == nil {
+	snapshotterIntVal := getSnapshotterIntValue(snapshotterAddr)
+	if snapshotterIntVal == nil {
 		return 0, errors.New("failed to calculate snapshotter hash")
 	}
 
@@ -372,7 +367,7 @@ func fetchPairContractIndex(dataMarketAddress string, epochID, slotID, size int6
 	calculationSum := new(big.Int)
 
 	// Perform the addition
-	calculationSum.Add(big.NewInt(epochID), snapshotterHash)
+	calculationSum.Add(big.NewInt(epochID), snapshotterIntVal)
 	calculationSum.Add(calculationSum, big.NewInt(slotID))
 	calculationSum.Add(calculationSum, currentDay)
 
