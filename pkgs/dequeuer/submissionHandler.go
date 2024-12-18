@@ -246,7 +246,14 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			log.Debugln("Fetched contract address from initial pairs: ", fetchedContractAddr, " slot ID: ", details.submission.Request.SlotId)
 
 			if expectedContractAddr != fetchedContractAddr {
-				log.Errorln("Mismatched pair contract index: ", err.Error())
+				log.Errorf(
+					"Mismatched pair contract index for data market %s, epoch %d, slot %d: expected %s, fetched %s",
+					details.dataMarketAddress,
+					details.submission.Request.EpochId,
+					details.submission.Request.SlotId,
+					expectedContractAddr,
+					fetchedContractAddr,
+				)
 				return errors.New("failed to verify pair contract index")
 			}
 		}
