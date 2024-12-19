@@ -111,14 +111,13 @@ func LoadConfig() {
 	SettingsObj = &config
 
 	// Now fetch the data sources after SettingsObj is set
-	initialPairsByMarket, err := fetchDataSourcesList()
+	initialSourcesByMarket, err := fetchDataSourcesList()
 	if err != nil {
 		log.Fatalf("Failed to fetch initial pairs: %v", err)
 	}
 
 	// Update the DataSourcesByMarket field
-	SettingsObj.DataSourcesByMarket = initialPairsByMarket
-	log.Debugf("DataSourcesByMarket: %v", SettingsObj.DataSourcesByMarket)
+	SettingsObj.DataSourcesByMarket = initialSourcesByMarket
 }
 
 func getEnv(key, defaultValue string) string {
