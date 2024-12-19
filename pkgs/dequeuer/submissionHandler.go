@@ -202,7 +202,11 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 					// Get the contract address from the project data
 					expectedContractAddr := strings.ToLower(projectData[1])
 					// for the data market address, get the data sources list
-					dataSourcesList := config.SettingsObj.DataSourcesByMarket[details.dataMarketAddress]
+					dataSourcesList := config.SettingsObj.DataSourcesByMarket[strings.ToLower(details.dataMarketAddress)]
+					if dataSourcesList == nil {
+						log.Errorf("No data sources found for data market %s (lowercase: %s)", details.dataMarketAddress, strings.ToLower(details.dataMarketAddress))
+						return fmt.Errorf("no data sources configured for data market %s", details.dataMarketAddress)
+					}
 
 					pairContractIndex, err := fetchPairContractIndex(
 						details.dataMarketAddress,
