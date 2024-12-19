@@ -211,6 +211,13 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		}
 
 		if config.SettingsObj.VerifySubmissionDataSourceIndex {
+			log.Debugf(
+				"Verifying submission data source index for data market %s, slot ID %d, epoch ID %d project ID %s",
+				details.dataMarketAddress,
+				details.submission.Request.SlotId,
+				details.submission.Request.EpochId,
+				details.submission.Request.ProjectId,
+			)
 			// Extract the contract address from the projectID
 			projectData := strings.Split(details.submission.Request.ProjectId, ":")
 
@@ -220,17 +227,23 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			}
 
 			// Get the contract address from the project data
-			expectedContractAddr := projectData[1]
-
-			// Retrieve the initial pairs from the configuration settings
-			initialPairs := config.SettingsObj.InitialPairs
+			expectedContractAddr := strings.ToLower(projectData[1])
+			// for the data market address, get the data sources list
+			dataSourcesList := config.SettingsObj.DataSourcesByMarket[details.dataMarketAddress]
 
 			pairContractIndex, err := fetchPairContractIndex(
 				details.dataMarketAddress,
 				int64(details.submission.Request.EpochId),
 				int64(details.submission.Request.SlotId),
-				int64(len(initialPairs)),
+				int64(len(dataSourcesList)),
 				snapshotterAddr,
+			)
+			log.Debugf(
+				"Fetched pair contract index for data market %s, slot ID %d, epoch ID %d: %d",
+				details.dataMarketAddress,
+				details.submission.Request.SlotId,
+				details.submission.Request.EpochId,
+				pairContractIndex,
 			)
 
 			if err != nil {
@@ -239,14 +252,15 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			}
 
 			// Retrieve the contract address corresponding to the calculated pair contract index
-			fetchedContractAddr := initialPairs[pairContractIndex]
+			fetchedContractAddr := strings.ToLower(dataSourcesList[pairContractIndex])
 
 			if expectedContractAddr != fetchedContractAddr {
 				log.Errorf(
-					"Mismatched pair contract index for data market %s, epoch %d, slot %d: expected %s, fetched %s",
+					"Mismatched pair contract index for data market %s, epoch %d, slot %d project ID %s: expected %s, fetched %s",
 					details.dataMarketAddress,
 					details.submission.Request.EpochId,
 					details.submission.Request.SlotId,
+					details.submission.Request.ProjectId,
 					expectedContractAddr,
 					fetchedContractAddr,
 				)

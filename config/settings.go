@@ -35,7 +35,7 @@ type Settings struct {
 	VerifySubmissionDataSourceIndex bool
 	SlackReportingUrl               string
 	RedisDB                         string
-	InitialPairs                    []string
+	DataSourcesByMarket             map[string][]string
 }
 
 // Add this new method to the Settings struct
@@ -79,7 +79,7 @@ func LoadConfig() {
 		log.Fatalf("Failed to parse CHAIN_ID environment variable: %v", err)
 	}
 
-	initialPairs, err := fetchInitialPairs()
+	initialPairsByMarket, err := fetchDataSourcesList()
 	if err != nil {
 		log.Fatalf("Failed to fetch initial pairs: %v", err)
 	}
@@ -101,7 +101,7 @@ func LoadConfig() {
 		VerifySubmissionDataSourceIndex: verifySubmissionDataSourceIndex,
 		FullNodes:                       fullNodesList,
 		ChainID:                         chainId,
-		InitialPairs:                    initialPairs,
+		DataSourcesByMarket:             initialPairsByMarket,
 	}
 
 	SettingsObj = &config
@@ -115,8 +115,8 @@ func getEnv(key, defaultValue string) string {
 	return value
 }
 
-func fetchInitialPairs() ([]string, error) {
-	var allPairs []string
+func fetchDataSourcesList() (map[string][]string, error) {
+	dataSourcesByMarket := make(map[string][]string)
 
 	for _, config := range SettingsObj.DataMarketAddressesConfig {
 		settings, err := fetchSettingsObject(config.DataSourcesUrl)
@@ -129,10 +129,10 @@ func fetchInitialPairs() ([]string, error) {
 			return nil, fmt.Errorf("failed to parse pairs for %s: %v", config.Address, err)
 		}
 
-		allPairs = append(allPairs, pairs...)
+		dataSourcesByMarket[strings.ToLower(config.Address)] = pairs
 	}
 
-	return allPairs, nil
+	return dataSourcesByMarket, nil
 }
 
 func fetchSettingsObject(url string) (map[string]interface{}, error) {
