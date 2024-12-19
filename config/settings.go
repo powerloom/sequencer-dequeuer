@@ -158,7 +158,8 @@ func fetchDataSourcesList() (map[string][]string, error) {
 		}
 
 		dataSourcesByMarket[strings.ToLower(dataMarketAddress)] = sources
-		log.Debugf("Loaded %d sources for data market %s", len(sources), dataMarketAddress)
+		log.Debugf("Loaded %d sources for data market %s (type: %T, first element type: %T)",
+			len(sources), dataMarketAddress, sources, sources[0])
 	}
 
 	return dataSourcesByMarket, nil
@@ -199,11 +200,15 @@ func interfaceToStringSlice(i interface{}) ([]string, error) {
 		return nil, fmt.Errorf("not a slice: %T", i)
 	}
 
-	var pairs []string
+	var result []string
 	for idx := 0; idx < value.Len(); idx++ {
-		element := value.Index(idx)
-		pairs = append(pairs, element.String())
+		element := value.Index(idx).Interface()
+		str, ok := element.(string)
+		if !ok {
+			return nil, fmt.Errorf("element at index %d is not a string: %T", idx, element)
+		}
+		result = append(result, str)
 	}
 
-	return pairs, nil
+	return result, nil
 }
