@@ -79,16 +79,12 @@ func LoadConfig() {
 		log.Fatalf("Failed to parse CHAIN_ID environment variable: %v", err)
 	}
 
-	initialPairsByMarket, err := fetchDataSourcesList()
-	if err != nil {
-		log.Fatalf("Failed to fetch initial pairs: %v", err)
-	}
-
 	verifySubmissionDataSourceIndex, err := strconv.ParseBool(getEnv("VERIFY_SUBMISSION_DATA_SOURCE_INDEX", "false"))
 	if err != nil {
 		log.Fatalf("Failed to parse VERIFY_SUBMISSION_DATA_SOURCE_INDEX environment variable: %v", err)
 	}
 
+	// Create the config object first
 	config := Settings{
 		ClientUrl:                       getEnv("PROST_RPC_URL", ""),
 		ContractAddress:                 getEnv("PROTOCOL_STATE_CONTRACT", ""),
@@ -101,10 +97,20 @@ func LoadConfig() {
 		VerifySubmissionDataSourceIndex: verifySubmissionDataSourceIndex,
 		FullNodes:                       fullNodesList,
 		ChainID:                         chainId,
-		DataSourcesByMarket:             initialPairsByMarket,
+		DataSourcesByMarket:             make(map[string][]string), // Initialize empty map
 	}
 
+	// Set the global SettingsObj
 	SettingsObj = &config
+
+	// Now fetch the data sources after SettingsObj is set
+	initialPairsByMarket, err := fetchDataSourcesList()
+	if err != nil {
+		log.Fatalf("Failed to fetch initial pairs: %v", err)
+	}
+
+	// Update the DataSourcesByMarket field
+	SettingsObj.DataSourcesByMarket = initialPairsByMarket
 }
 
 func getEnv(key, defaultValue string) string {
