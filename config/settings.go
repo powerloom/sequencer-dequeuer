@@ -118,6 +118,7 @@ func LoadConfig() {
 
 	// Update the DataSourcesByMarket field
 	SettingsObj.DataSourcesByMarket = initialPairsByMarket
+	log.Debugf("DataSourcesByMarket: %v", SettingsObj.DataSourcesByMarket)
 }
 
 func getEnv(key, defaultValue string) string {
@@ -131,18 +132,34 @@ func getEnv(key, defaultValue string) string {
 func fetchDataSourcesList() (map[string][]string, error) {
 	dataSourcesByMarket := make(map[string][]string)
 
+	// Create a map to easily lookup config by address
+	configByAddress := make(map[string]DataMarketConfig)
 	for _, config := range SettingsObj.DataMarketAddressesConfig {
+		configByAddress[strings.ToLower(config.Address)] = config
+	}
+
+	for _, dataMarketAddress := range SettingsObj.DataMarketAddresses {
+		// Look up the config for this address
+		config, exists := configByAddress[strings.ToLower(dataMarketAddress)]
+		if !exists {
+			log.Warnf("No configuration found for data market address: %s, skipping", dataMarketAddress)
+			continue
+		}
+
 		settings, err := fetchSettingsObject(config.DataSourcesUrl)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch settings for %s: %v", config.Address, err)
+			log.Warnf("Failed to fetch settings for %s: %v, skipping", config.Address, err)
+			continue
 		}
 
-		pairs, err := interfaceToStringSlice(settings[config.ListKey])
+		sources, err := interfaceToStringSlice(settings[config.ListKey])
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse pairs for %s: %v", config.Address, err)
+			log.Warnf("Failed to parse pairs for %s: %v, skipping", config.Address, err)
+			continue
 		}
 
-		dataSourcesByMarket[strings.ToLower(config.Address)] = pairs
+		dataSourcesByMarket[strings.ToLower(dataMarketAddress)] = sources
+		log.Debugf("Loaded %d sources for data market %s", len(sources), dataMarketAddress)
 	}
 
 	return dataSourcesByMarket, nil
