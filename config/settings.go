@@ -63,6 +63,8 @@ func LoadConfig() {
 	err = json.Unmarshal([]byte(dataMarketAddressesConfig), &dataMarketConfigList)
 	if err != nil {
 		log.Fatalf("Failed to parse DATA_MARKET_ADDRESSES_CONFIG environment variable: %v", err)
+	} else {
+		log.Debugf("Found data sources configuration of data markets %v", dataMarketConfigList)
 	}
 	if len(dataMarketConfigList) == 0 {
 		log.Fatalf("DATA_MARKET_ADDRESSES_CONFIG environment variable has an empty array")
@@ -70,8 +72,13 @@ func LoadConfig() {
 
 	// Extract addresses from config
 	var dataMarketAddressesList []string
-	for _, config := range dataMarketConfigList {
-		dataMarketAddressesList = append(dataMarketAddressesList, config.Address)
+	// parse the data market addresses from the env
+	dataMarketAddressesUnmarshalled := getEnv("DATA_MARKET_ADDRESSES", "")
+	err = json.Unmarshal([]byte(dataMarketAddressesUnmarshalled), &dataMarketAddressesList)
+	if err != nil {
+		log.Fatalf("Failed to parse DATA_MARKET_ADDRESSES environment variable: %v", err)
+	} else {
+		log.Debugf("DATA_MARKET_ADDRESSES environment variable: %v", dataMarketAddressesList)
 	}
 
 	chainId, err := strconv.ParseInt(getEnv("CHAIN_ID", ""), 10, 64)
