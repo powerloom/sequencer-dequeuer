@@ -3,6 +3,7 @@ package prost
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"math/big"
 	"net/http"
 	"sequencer-dequeuer/config"
@@ -20,8 +21,7 @@ import (
 var Instance *protocolStateContractABIGen.Contract
 
 var (
-	Client       *ethclient.Client
-	epochsInADay = 720
+	Client *ethclient.Client
 )
 
 func ConfigureClient() {
@@ -76,46 +76,19 @@ func getExpirationTime(epochID, daySize int64) time.Time {
 
 // FetchCurrentDay fetches the current day from the contract and caches the result in Redis
 func FetchCurrentDay(dataMarketAddress string) (*big.Int, error) {
-	// TODO: change this to accomodate for multiple data markets and
-	// verify whether they support static or dynamic data source lists
-
-	// Check Redis cache first
+	// Check Redis cache
 	cachedDay, err := redis.Get(context.Background(), redis.DataMarketCurrentDay(dataMarketAddress))
-	if err == nil {
-		// Cache hit: return the cached value
-		currentDay := new(big.Int)
-		currentDay.SetString(cachedDay, 10)
-		return currentDay, nil
-	}
-
-	// Cache miss: fetch from contract: call the `DayCounter` method
-	currentDay, err := Instance.DayCounter(nil, common.HexToAddress(dataMarketAddress))
 	if err != nil {
-		log.Printf("Failed to fetch current day from contract: %v", err)
 		return nil, err
 	}
 
-	// Fetch the current epoch from the contract
-	currentEpoch, err := Instance.CurrentEpoch(nil, common.HexToAddress(dataMarketAddress))
-	if err != nil {
-		log.Printf("Failed to fetch current epoch from contract: %v", err)
-		return nil, err
-	}
+	// Cache hit: return the cached value
+	currentDay := new(big.Int)
+	currentDay.SetString(cachedDay, 10)
 
-	// Fetch the day size from the contract
-	daySize, err := Instance.DAYSIZE(nil, common.HexToAddress(dataMarketAddress))
-	if err != nil {
-		log.Printf("Failed to fetch day size from contract: %v", err)
-		return nil, err
-	}
-
-	// Calculate expiration time
-	expirationTime := getExpirationTime(currentEpoch.EpochId.Int64(), daySize.Int64())
-
-	// Set the current day in Redis with the calculated expiration duration
-	if err := redis.Set(context.Background(), redis.DataMarketCurrentDay(dataMarketAddress), currentDay.String(), time.Until(expirationTime)); err != nil {
-		log.Printf("Failed to cache current day in Redis: %v", err)
-		return nil, err
+	// Return error if current day is 0
+	if currentDay.Cmp(big.NewInt(0)) == 0 {
+		return nil, fmt.Errorf("current day is 0")
 	}
 
 	return currentDay, nil
