@@ -52,7 +52,7 @@ func MustQuery[K any](ctx context.Context, call func() (val K, err error)) (K, e
 	return val, err
 }
 
-func getExpirationTime(epochID, daySize int64) time.Time {
+func getExpirationTime(epochID, daySize int64, epochsInADay int64) time.Time {
 	// DAY_SIZE in microseconds
 	updatedDaySize := time.Duration(daySize) * time.Microsecond
 
