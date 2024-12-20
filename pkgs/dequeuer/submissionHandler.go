@@ -200,7 +200,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 					}
 
 					// Get the contract address from the project data
-					expectedContractAddr := strings.ToLower(projectData[1])
+					extractedContractAddr := strings.ToLower(projectData[1])
 					// for the data market address, get the data sources list
 					dataSourcesList := config.SettingsObj.DataSourcesByMarket[strings.ToLower(details.dataMarketAddress)]
 					if dataSourcesList == nil {
@@ -208,44 +208,53 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 						return fmt.Errorf("no data sources configured for data market %s", details.dataMarketAddress)
 					}
 
-					pairContractIndex, err := fetchDataSourceIndex(
+					dataSourceIndex, err := fetchDataSourceIndex(
 						details.dataMarketAddress,
 						int64(details.submission.Request.EpochId),
 						int64(details.submission.Request.SlotId),
 						int64(len(dataSourcesList)),
 						snapshotterAddr,
 					)
+					// Retrieve the contract address corresponding to the calculated pair contract index
+					expectedContractAddr := strings.ToLower(dataSourcesList[dataSourceIndex])
 					log.Debugf(
-						"Fetched pair contract index for data market %s, slot ID %d, epoch ID %d: %d",
+						"🔎 Fetched expected data source contract index for data market %s, slot ID %d, epoch ID %d: %d | Contract address at that index: %s",
 						details.dataMarketAddress,
 						details.submission.Request.SlotId,
 						details.submission.Request.EpochId,
-						pairContractIndex,
+						dataSourceIndex,
+						expectedContractAddr,
 					)
-
 					if err != nil {
 						reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprint("Failed to fetch pair contract index: ", err.Error()), time.Now().String(), "High")
 						log.Error("Failed to fetch pair contract index: ", err.Error())
 					}
 
-					// Retrieve the contract address corresponding to the calculated pair contract index
-					fetchedContractAddr := strings.ToLower(dataSourcesList[pairContractIndex])
-
-					if expectedContractAddr != fetchedContractAddr {
+					if expectedContractAddr != extractedContractAddr {
 						log.Errorf(
-							"Mismatched pair contract index for data market %s, epoch %d, slot %d project ID %s: expected %s, fetched %s",
+							"❌ Mismatched pair contract index for data market %s, epoch %d, slot %d project ID %s: provided %s by submission, expected %s from calculation",
 							details.dataMarketAddress,
 							details.submission.Request.EpochId,
 							details.submission.Request.SlotId,
 							details.submission.Request.ProjectId,
+							extractedContractAddr,
 							expectedContractAddr,
-							fetchedContractAddr,
 						)
 						return errors.New("failed to verify pair contract index")
+					} else {
+						log.Debugf(
+							"✅ Verified pair contract index for data market %s, epoch %d, slot %d project ID %s: extracted %s from submission, expected %s from calculation",
+							details.dataMarketAddress,
+							details.submission.Request.EpochId,
+							details.submission.Request.SlotId,
+							details.submission.Request.ProjectId,
+							extractedContractAddr,
+							expectedContractAddr,
+						)
 					}
 				} else {
 					log.Debugf(
-						"Skipping verification of submission data source index for data market %s , slot ID %d, epoch ID %d project ID %s",
+						"🙅‍♀️ Skipping verification of submission data source index for data market %s , slot ID %d, epoch ID %d project ID %s",
 						details.dataMarketAddress,
 						details.submission.Request.SlotId,
 						details.submission.Request.EpochId,
