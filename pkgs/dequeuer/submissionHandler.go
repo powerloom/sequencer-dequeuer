@@ -364,7 +364,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 func getSnapshotterIntValue(snapshotAddr common.Address) *big.Int {
 	// Convert the address into a lower case string
-	snapshotterAddrString := strings.ToLower(snapshotAddr.String())
+	snapshotterAddrString := strings.ToLower(snapshotAddr.Hex())
 
 	// Convert the hexadecimal string to an integer (base 16)
 	intVal := new(big.Int)
