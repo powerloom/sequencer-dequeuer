@@ -208,7 +208,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 						return fmt.Errorf("no data sources configured for data market %s", details.dataMarketAddress)
 					}
 
-					pairContractIndex, err := fetchPairContractIndex(
+					pairContractIndex, err := fetchDataSourceIndex(
 						details.dataMarketAddress,
 						int64(details.submission.Request.EpochId),
 						int64(details.submission.Request.SlotId),
@@ -372,7 +372,7 @@ func getSnapshotterIntValue(snapshotAddr common.Address) *big.Int {
 	return intVal
 }
 
-func fetchPairContractIndex(dataMarketAddress string, epochID, slotID, size int64, snapshotterAddr common.Address) (int64, error) {
+func fetchDataSourceIndex(dataMarketAddress string, epochID, slotID, size int64, snapshotterAddr common.Address) (int64, error) {
 	// Calculate snapshotter hash
 	snapshotterIntVal := getSnapshotterIntValue(snapshotterAddr)
 	if snapshotterIntVal == nil {
@@ -401,9 +401,9 @@ func fetchPairContractIndex(dataMarketAddress string, epochID, slotID, size int6
 		return 0, errors.New("size parameter cannot be zero to avoid division by zero")
 	}
 
-	calculatedPairIndex := new(big.Int).Mod(calculationSum, big.NewInt(size)).Int64()
+	calculatedDataSourceIndex := new(big.Int).Mod(calculationSum, big.NewInt(size)).Int64()
 
-	return calculatedPairIndex, nil
+	return calculatedDataSourceIndex, nil
 }
 
 func (s *SubmissionHandler) startSubmissionDequeuer() {
