@@ -16,10 +16,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var Instance *protocolStateContractABIGen.Contract
-
 var (
 	Client       *ethclient.Client
+	Instance     *protocolStateContractABIGen.Contract
 	epochsInADay = 720
 )
 
@@ -30,6 +29,7 @@ func ConfigureClient() {
 	}
 	Client = ethclient.NewClient(rpcClient)
 }
+
 func ConfigureContractInstance() {
 	Instance, _ = protocolStateContractABIGen.NewContract(common.HexToAddress(config.SettingsObj.ContractAddress), Client)
 }

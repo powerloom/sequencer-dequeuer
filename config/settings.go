@@ -61,7 +61,7 @@ func LoadConfig() {
 		log.Fatalf("DATA_MARKET_ADDRESSES environment variable has an empty array")
 	}
 
-	chainId, err := strconv.ParseInt(getEnv("CHAIN_ID", ""), 10, 64)
+	chainID, err := strconv.ParseInt(getEnv("CHAIN_ID", ""), 10, 64)
 	if err != nil {
 		log.Fatalf("Failed to parse CHAIN_ID environment variable: %v", err)
 	}
@@ -86,11 +86,11 @@ func LoadConfig() {
 		RedisDB:                         getEnv("REDIS_DB", ""),
 		VerifySubmissionDataSourceIndex: verifySubmissionDataSourceIndex,
 		FullNodes:                       fullNodesList,
-		ChainID:                         chainId,
+		ChainID:                         chainID,
 		InitialPairs:                    initialPairs,
 	}
 
-	// transforming to checksum addresses
+	// Convert data market address to checksum addresses
 	for _, address := range config.DataMarketAddresses {
 		config.DataMarketContractAddresses = append(config.DataMarketContractAddresses, common.HexToAddress(address))
 	}
