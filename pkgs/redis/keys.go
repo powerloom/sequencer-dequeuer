@@ -29,10 +29,6 @@ func ContractStateVariable(varName string) string {
 	return fmt.Sprintf("ProtocolState.%s", varName)
 }
 
-func ContractStateVariableWithDataMarketAddress(dataMarketAddress string, varName string) string {
-	return fmt.Sprintf("ProtocolState.%s.%s", strings.ToLower(dataMarketAddress), varName)
-}
-
 func SlotEpochSubmissionCountExceeded(dataMarketAddress string, slotId string, epochId uint64) string {
 	return fmt.Sprintf("SlotEpochSubmissionCountExceeded.%s.%s.%d", strings.ToLower(dataMarketAddress), slotId, epochId)
 }
@@ -51,10 +47,6 @@ func EpochSubmissionsKey(dataMarketAddress string, epochId uint64) string {
 
 func SlotEpochSubmissionsKey(dataMarketAddress string, slotId string, epochId uint64) string {
 	return fmt.Sprintf("SlotEpochCounter.%s.%s.%d", strings.ToLower(dataMarketAddress), slotId, epochId)
-}
-
-func TriggeredProcessLog(process, identifier string) string {
-	return fmt.Sprintf("%s.%s.%s", pkgs.ProcessTriggerKey, process, identifier)
 }
 
 func GetSnapshotterSlotSubmissionsHtable(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
