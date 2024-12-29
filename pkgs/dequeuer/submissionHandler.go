@@ -38,11 +38,6 @@ type SubmissionDetails struct {
 type SubmissionHandler struct {
 }
 
-func (sh *SubmissionHandler) Start() {
-	// Implement the submission handling logic here
-	sh.startSubmissionDequeuer()
-}
-
 type SnapshotData struct {
 	EpochID     uint64
 	SlotID      uint64
@@ -59,6 +54,11 @@ func isFullNode(addr string) bool {
 		}
 	}
 	return false
+}
+
+func (sh *SubmissionHandler) Start() {
+	// Implement the submission handling logic here
+	sh.startSubmissionDequeuer()
 }
 
 // TODO: Update verification logic
