@@ -78,12 +78,7 @@ func Get(ctx context.Context, key string) (string, error) {
 	return val, nil
 }
 
-func Set(ctx context.Context, key, value string) error {
-	return RedisClient.Set(ctx, key, value, 0).Err()
-}
-
-// Use this when you want to set an expiration
-func SetWithExpiration(ctx context.Context, key, value string, expiration time.Duration) error {
+func Set(ctx context.Context, key, value string, expiration time.Duration) error {
 	return RedisClient.Set(ctx, key, value, expiration).Err()
 }
 

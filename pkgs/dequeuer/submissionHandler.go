@@ -119,7 +119,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 		// Set the node version in Redis
 		snapshotterNodeVersionKey := redis.GetSnapshotterNodeVersion(details.dataMarketAddress, snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
-		if err := redis.Set(context.Background(), snapshotterNodeVersionKey, nodeVersion); err != nil {
+		if err := redis.Set(context.Background(), snapshotterNodeVersionKey, nodeVersion, 0); err != nil {
 			log.Errorf("Failed to set node version in Redis: %v", err)
 			return fmt.Errorf("failed to set node version in Redis: %s", err.Error())
 		}
@@ -366,7 +366,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			if count > 2 {
 				errMsg := fmt.Sprintf("Slot epoch submission count exceeded for slot ID %s", strconv.FormatUint(details.submission.Request.SlotId, 10))
 				log.Errorln("Slot epoch submission count exceeded: ", errMsg)
-				if err := redis.SetWithExpiration(
+				if err := redis.Set(
 					context.Background(),
 					redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId),
 					"true",
