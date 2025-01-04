@@ -17,6 +17,12 @@ import (
 
 var SettingsObj *Settings
 
+type DataMarketConfig struct {
+	Address        string `json:"address"`
+	DataSourcesUrl string `json:"dataSourcesUrl"`
+	ListKey        string `json:"listKey"`
+}
+
 type Settings struct {
 	ClientUrl                       string
 	ContractAddress                 string
@@ -25,18 +31,18 @@ type Settings struct {
 	ChainID                         int64
 	FullNodes                       []string
 	DataMarketAddresses             []string
-	DataMarketContractAddresses     []common.Address
+	DataMarketAddressesConfig       []DataMarketConfig
 	VerifySubmissionDataSourceIndex bool
 	SlackReportingUrl               string
 	RedisDB                         string
-	InitialPairs                    []string
+	DataSourcesByMarket             map[string][]string
 }
 
 // Add this new method to the Settings struct
 func (s *Settings) IsValidDataMarketAddress(address common.Address) bool {
 	lowercaseAddress := strings.ToLower(address.Hex())
-	for _, validAddress := range s.DataMarketContractAddresses {
-		if strings.ToLower(validAddress.Hex()) == lowercaseAddress {
+	for _, validAddress := range s.DataMarketAddresses {
+		if strings.ToLower(validAddress) == lowercaseAddress {
 			return true
 		}
 	}
@@ -51,14 +57,28 @@ func LoadConfig() {
 		log.Fatalf("Failed to parse FULL_NODES environment variable: %v", err)
 	}
 
-	dataMarketAddresses := getEnv("DATA_MARKET_ADDRESSES", "[]")
-	dataMarketAddressesList := []string{}
-	err = json.Unmarshal([]byte(dataMarketAddresses), &dataMarketAddressesList)
+	// Parse the new config format
+	dataMarketAddressesConfig := getEnv("DATA_MARKET_ADDRESSES_CONFIG", "[]")
+	var dataMarketConfigList []DataMarketConfig
+	err = json.Unmarshal([]byte(dataMarketAddressesConfig), &dataMarketConfigList)
+	if err != nil {
+		log.Fatalf("Failed to parse DATA_MARKET_ADDRESSES_CONFIG environment variable: %v", err)
+	} else {
+		log.Debugf("Found data sources configuration of data markets %v", dataMarketConfigList)
+	}
+	if len(dataMarketConfigList) == 0 {
+		log.Fatalf("DATA_MARKET_ADDRESSES_CONFIG environment variable has an empty array")
+	}
+
+	// Extract addresses from config
+	var dataMarketAddressesList []string
+	// parse the data market addresses from the env
+	dataMarketAddressesUnmarshalled := getEnv("DATA_MARKET_ADDRESSES", "")
+	err = json.Unmarshal([]byte(dataMarketAddressesUnmarshalled), &dataMarketAddressesList)
 	if err != nil {
 		log.Fatalf("Failed to parse DATA_MARKET_ADDRESSES environment variable: %v", err)
-	}
-	if len(dataMarketAddressesList) == 0 {
-		log.Fatalf("DATA_MARKET_ADDRESSES environment variable has an empty array")
+	} else {
+		log.Debugf("DATA_MARKET_ADDRESSES environment variable: %v", dataMarketAddressesList)
 	}
 
 	chainID, err := strconv.ParseInt(getEnv("CHAIN_ID", ""), 10, 64)
@@ -66,16 +86,12 @@ func LoadConfig() {
 		log.Fatalf("Failed to parse CHAIN_ID environment variable: %v", err)
 	}
 
-	initialPairs, err := fetchInitialPairs()
-	if err != nil {
-		log.Fatalf("Failed to fetch initial pairs: %v", err)
-	}
-
 	verifySubmissionDataSourceIndex, err := strconv.ParseBool(getEnv("VERIFY_SUBMISSION_DATA_SOURCE_INDEX", "false"))
 	if err != nil {
 		log.Fatalf("Failed to parse VERIFY_SUBMISSION_DATA_SOURCE_INDEX environment variable: %v", err)
 	}
 
+	// Create the config object first
 	config := Settings{
 		ClientUrl:                       getEnv("PROST_RPC_URL", ""),
 		ContractAddress:                 getEnv("PROTOCOL_STATE_CONTRACT", ""),
@@ -83,19 +99,25 @@ func LoadConfig() {
 		RedisPort:                       getEnv("REDIS_PORT", ""),
 		SlackReportingUrl:               getEnv("SLACK_REPORTING_URL", ""),
 		DataMarketAddresses:             dataMarketAddressesList,
+		DataMarketAddressesConfig:       dataMarketConfigList,
 		RedisDB:                         getEnv("REDIS_DB", ""),
 		VerifySubmissionDataSourceIndex: verifySubmissionDataSourceIndex,
 		FullNodes:                       fullNodesList,
 		ChainID:                         chainID,
-		InitialPairs:                    initialPairs,
+		DataSourcesByMarket:             make(map[string][]string), // Initialize empty map
 	}
 
-	// Convert data market address to checksum addresses
-	for _, address := range config.DataMarketAddresses {
-		config.DataMarketContractAddresses = append(config.DataMarketContractAddresses, common.HexToAddress(address))
-	}
-
+	// Set the global SettingsObj
 	SettingsObj = &config
+
+	// Now fetch the data sources after SettingsObj is set
+	initialSourcesByMarket, err := fetchDataSourcesList()
+	if err != nil {
+		log.Fatalf("Failed to fetch initial pairs: %v", err)
+	}
+
+	// Update the DataSourcesByMarket field
+	SettingsObj.DataSourcesByMarket = initialSourcesByMarket
 }
 
 func getEnv(key, defaultValue string) string {
@@ -106,19 +128,41 @@ func getEnv(key, defaultValue string) string {
 	return value
 }
 
-func fetchInitialPairs() ([]string, error) {
-	url := getEnv("DATA_MARKET_STATIC_SOURCE_LIST", "")
-	settings, err := fetchSettingsObject(url)
-	if err != nil {
-		return nil, err
+func fetchDataSourcesList() (map[string][]string, error) {
+	dataSourcesByMarket := make(map[string][]string)
+
+	// Create a map to easily lookup config by address
+	configByAddress := make(map[string]DataMarketConfig)
+	for _, config := range SettingsObj.DataMarketAddressesConfig {
+		configByAddress[strings.ToLower(config.Address)] = config
 	}
 
-	initialPairs, err := interfaceToStringSlice(settings["initial_pairs"])
-	if err != nil {
-		return nil, err
+	for _, dataMarketAddress := range SettingsObj.DataMarketAddresses {
+		// Look up the config for this address
+		config, exists := configByAddress[strings.ToLower(dataMarketAddress)]
+		if !exists {
+			log.Warnf("No configuration found for data market address: %s, skipping", dataMarketAddress)
+			continue
+		}
+
+		settings, err := fetchSettingsObject(config.DataSourcesUrl)
+		if err != nil {
+			log.Warnf("Failed to fetch settings for %s: %v, skipping", config.Address, err)
+			continue
+		}
+
+		sources, err := interfaceToStringSlice(settings[config.ListKey])
+		if err != nil {
+			log.Warnf("Failed to parse pairs for %s: %v, skipping", config.Address, err)
+			continue
+		}
+
+		dataSourcesByMarket[strings.ToLower(dataMarketAddress)] = sources
+		log.Debugf("Loaded %d sources for data market %s (type: %T, first element type: %T)",
+			len(sources), dataMarketAddress, sources, sources[0])
 	}
 
-	return initialPairs, nil
+	return dataSourcesByMarket, nil
 }
 
 func fetchSettingsObject(url string) (map[string]interface{}, error) {
@@ -156,11 +200,15 @@ func interfaceToStringSlice(i interface{}) ([]string, error) {
 		return nil, fmt.Errorf("not a slice: %T", i)
 	}
 
-	var pairs []string
+	var result []string
 	for idx := 0; idx < value.Len(); idx++ {
-		element := value.Index(idx)
-		pairs = append(pairs, element.String())
+		element := value.Index(idx).Interface()
+		str, ok := element.(string)
+		if !ok {
+			return nil, fmt.Errorf("element at index %d is not a string: %T", idx, element)
+		}
+		result = append(result, str)
 	}
 
-	return pairs, nil
+	return result, nil
 }

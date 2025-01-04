@@ -20,7 +20,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -179,8 +178,89 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			// AllSnapshotters state check to be added
 			var errMsg string
 			if snapshotterAddr.Hex() != slotInfo.SnapshotterAddress.Hex() {
-				errMsg = "Incorrect snapshotter address extracted" + string(snapshotterAddr.Hex()) + "for specified slot " + strconv.FormatUint(details.submission.Request.SlotId, 10) + " : " + string(slotInfo.SnapshotterAddress.Hex())
+				errMsg = fmt.Sprintf("Incorrect snapshotter address extracted %s for specified slot %d: %s",
+					snapshotterAddr.Hex(),
+					details.submission.Request.SlotId,
+					slotInfo.SnapshotterAddress.Hex())
 			} else {
+				if config.SettingsObj.VerifySubmissionDataSourceIndex {
+					log.Debugf(
+						"Verifying submission data source index for data market %s, slot ID %d, epoch ID %d project ID %s",
+						details.dataMarketAddress,
+						details.submission.Request.SlotId,
+						details.submission.Request.EpochId,
+						details.submission.Request.ProjectId,
+					)
+					// Extract the contract address from the projectID
+					projectData := strings.Split(details.submission.Request.ProjectId, ":")
+
+					// Ensure there are exactly three parts
+					if len(projectData) != 3 {
+						log.Printf("unexpected format for projectID: %s", details.submission.Request.ProjectId)
+					}
+
+					// Get the contract address from the project data
+					extractedContractAddr := strings.ToLower(projectData[1])
+					// for the data market address, get the data sources list
+					dataSourcesList := config.SettingsObj.DataSourcesByMarket[strings.ToLower(details.dataMarketAddress)]
+					if dataSourcesList == nil {
+						log.Errorf("No data sources found for data market %s (lowercase: %s)", details.dataMarketAddress, strings.ToLower(details.dataMarketAddress))
+						return fmt.Errorf("no data sources configured for data market %s", details.dataMarketAddress)
+					}
+
+					dataSourceIndex, err := fetchDataSourceIndex(
+						details.dataMarketAddress,
+						int64(details.submission.Request.EpochId),
+						int64(details.submission.Request.SlotId),
+						int64(len(dataSourcesList)),
+						snapshotterAddr,
+					)
+					// Retrieve the contract address corresponding to the calculated pair contract index
+					expectedContractAddr := strings.ToLower(dataSourcesList[dataSourceIndex])
+					log.Debugf(
+						"🔎 Fetched expected data source contract index for data market %s, slot ID %d, epoch ID %d: %d | Contract address at that index: %s",
+						details.dataMarketAddress,
+						details.submission.Request.SlotId,
+						details.submission.Request.EpochId,
+						dataSourceIndex,
+						expectedContractAddr,
+					)
+					if err != nil {
+						reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprint("Failed to fetch pair contract index: ", err.Error()), time.Now().String(), "High")
+						log.Error("Failed to fetch pair contract index: ", err.Error())
+					}
+
+					if expectedContractAddr != extractedContractAddr {
+						log.Errorf(
+							"❌ Mismatched pair contract index for data market %s, epoch %d, slot %d project ID %s: provided %s by submission, expected %s from calculation",
+							details.dataMarketAddress,
+							details.submission.Request.EpochId,
+							details.submission.Request.SlotId,
+							details.submission.Request.ProjectId,
+							extractedContractAddr,
+							expectedContractAddr,
+						)
+						return errors.New("failed to verify pair contract index")
+					} else {
+						log.Debugf(
+							"✅ Verified pair contract index for data market %s, epoch %d, slot %d project ID %s: extracted %s from submission, expected %s from calculation",
+							details.dataMarketAddress,
+							details.submission.Request.EpochId,
+							details.submission.Request.SlotId,
+							details.submission.Request.ProjectId,
+							extractedContractAddr,
+							expectedContractAddr,
+						)
+					}
+				} else {
+					log.Debugf(
+						"🙅‍♀️ Skipping verification of submission data source index for data market %s , slot ID %d, epoch ID %d project ID %s",
+						details.dataMarketAddress,
+						details.submission.Request.SlotId,
+						details.submission.Request.EpochId,
+						details.submission.Request.ProjectId,
+					)
+				}
 				currentEpochStr, _ := redis.Get(context.Background(), redis.CurrentEpoch(details.dataMarketAddress))
 				log.Debugf("Current epoch for data market %s: %s", details.dataMarketAddress, currentEpochStr)
 				if currentEpochStr == "" {
@@ -205,41 +285,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			if errMsg != "" {
 				log.Debugln("Snapshot submission rejected: ", errMsg)
 				return errors.New("invalid snapshot")
-			}
-		}
-		if config.SettingsObj.VerifySubmissionDataSourceIndex {
-			// Extract the contract address from the projectID
-			projectData := strings.Split(details.submission.Request.ProjectId, ":")
-
-			// Ensure there are exactly three parts
-			if len(projectData) != 3 {
-				log.Printf("unexpected format for projectID: %s", details.submission.Request.ProjectId)
-			}
-
-			// Get the contract address from the project data
-			expectedContractAddr := projectData[1]
-
-			// Retrieve the initial pairs from the configuration settings
-			initialPairs := config.SettingsObj.InitialPairs
-
-			pairContractIndex, err := fetchPairContractIndex(
-				int64(details.submission.Request.EpochId),
-				int64(details.submission.Request.SlotId),
-				int64(len(initialPairs)),
-				snapshotterAddr,
-			)
-			if err != nil {
-				errMsg := fmt.Sprintf("Failed to fetch pair contract index: %s", err.Error())
-				reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
-				log.Error(errMsg)
-			}
-
-			// Retrieve the contract address corresponding to the calculated pair contract index
-			fetchedContractAddr := initialPairs[pairContractIndex]
-
-			if expectedContractAddr != fetchedContractAddr {
-				log.Errorln("Mismatched pair contract index: ", err.Error())
-				return errors.New("failed to verify pair contract index")
 			}
 		}
 	}
@@ -342,46 +387,48 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	return nil
 }
 
-func getSnapshotterHash(snapshotAddr common.Address) *big.Int {
+func getSnapshotterIntValue(snapshotAddr common.Address) *big.Int {
 	// Convert the address into a lower case string
-	snapshotterAddrString := strings.ToLower(snapshotAddr.String())
+	snapshotterAddrString := strings.ToLower(snapshotAddr.Hex())
 
 	// Convert the hexadecimal string to an integer (base 16)
 	intVal := new(big.Int)
 	intVal.SetString(snapshotterAddrString[2:], 16)
-
-	// Calculate snapshotter hash using Keccak256 algorithm
-	snapshotterHash := crypto.Keccak256(intVal.Bytes())
-
-	// Convert snapshotterHash (byte slice) to big.Int
-	snapshotterHashBigInt := new(big.Int).SetBytes(snapshotterHash)
-
-	return snapshotterHashBigInt
+	return intVal
 }
 
-func fetchPairContractIndex(epochID, slotID, size int64, snapshotterAddr common.Address) (int64, error) {
+func fetchDataSourceIndex(dataMarketAddress string, epochID, slotID, size int64, snapshotterAddr common.Address) (int64, error) {
 	// Calculate snapshotter hash
-	snapshotterHash := getSnapshotterHash(snapshotterAddr)
+	snapshotterIntVal := getSnapshotterIntValue(snapshotterAddr)
+	if snapshotterIntVal == nil {
+		return 0, errors.New("failed to calculate snapshotter hash")
+	}
 
 	// Fetch current day
-	currentDay, err := prost.FetchCurrentDay()
+	currentDay, err := prost.FetchCurrentDay(dataMarketAddress)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to fetch current day: %w", err)
+	}
+	if currentDay == nil {
+		return 0, errors.New("currentDay is nil")
 	}
 
 	// Initialize a total variable for the calculation
 	calculationSum := new(big.Int)
 
 	// Perform the addition
-	calculationSum.
-		Add(big.NewInt(epochID), snapshotterHash). // Add epochID and snapshotterHash
-		Add(calculationSum, big.NewInt(slotID)).   // Add slotID to the result
-		Add(calculationSum, currentDay)            // Add currentDay to the result
+	calculationSum.Add(big.NewInt(epochID), snapshotterIntVal)
+	calculationSum.Add(calculationSum, big.NewInt(slotID))
+	calculationSum.Add(calculationSum, currentDay)
 
 	// Calculate contract index based on the size of initial pairs
-	calculatedPairIndex := new(big.Int).Mod(calculationSum, big.NewInt(size)).Int64()
+	if size == 0 {
+		return 0, errors.New("size parameter cannot be zero to avoid division by zero")
+	}
 
-	return calculatedPairIndex, nil
+	calculatedDataSourceIndex := new(big.Int).Mod(calculationSum, big.NewInt(size)).Int64()
+
+	return calculatedDataSourceIndex, nil
 }
 
 func (s *SubmissionHandler) startSubmissionDequeuer() {
