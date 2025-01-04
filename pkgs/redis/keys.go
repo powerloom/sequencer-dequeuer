@@ -49,10 +49,6 @@ func SlotEpochSubmissionsKey(dataMarketAddress string, slotId string, epochId ui
 	return fmt.Sprintf("SlotEpochCounter.%s.%s.%d", strings.ToLower(dataMarketAddress), slotId, epochId)
 }
 
-func TriggeredProcessLog(process, identifier string) string {
-	return fmt.Sprintf("%s.%s.%s", pkgs.ProcessTriggerKey, process, identifier)
-}
-
 func LastSimulatedSubmission(dataMarketAddress string) string {
 	return fmt.Sprintf("%s.%s", pkgs.LastSimulatedSubmissionKey, strings.ToLower(dataMarketAddress))
 }
