@@ -86,6 +86,13 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	if details.submission.Request.EpochId == 0 {
 		log.Debugln("Received simulated submission: ", details.submission.String())
 
+		// Key to track the last simulation submission
+		simulationKey := redis.LastSimulationSubmission(details.dataMarketAddress)
+		if err := redis.RedisClient.Set(context.Background(), simulationKey, time.Now().Unix(), 5*time.Minute).Err(); err != nil {
+			log.Errorf("Failed to set last simulation timestamp in Redis: %v", err)
+			return fmt.Errorf("redis client failure: %s", err.Error())
+		}
+
 		var address common.Address
 		retrr := backoff.Retry(func() error {
 			address, err = prost.Instance.SlotSnapshotterMapping(&bind.CallOpts{}, new(big.Int).SetUint64(details.submission.Request.SlotId))
@@ -285,6 +292,13 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			if errMsg != "" {
 				log.Debugln("Snapshot submission rejected: ", errMsg)
 				return errors.New("invalid snapshot")
+			}
+
+			// Key to track the last snapshot submission for a released epoch
+			snapshotKey := redis.LastRegularSubmission(details.dataMarketAddress)
+			if err := redis.RedisClient.Set(context.Background(), snapshotKey, time.Now().Unix(), 5*time.Minute).Err(); err != nil {
+				log.Errorf("Failed to set last snapshot timestamp in Redis: %v", err)
+				return fmt.Errorf("redis client failure: %s", err.Error())
 			}
 		}
 	}

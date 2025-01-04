@@ -57,6 +57,14 @@ func TriggeredProcessLog(process, identifier string) string {
 	return fmt.Sprintf("%s.%s.%s", pkgs.ProcessTriggerKey, process, identifier)
 }
 
+func LastSimulationSubmission(dataMarketAddress string) string {
+	return fmt.Sprintf("%s.%s", pkgs.LastSimulationSubmissionKey, strings.ToLower(dataMarketAddress))
+}
+
+func LastRegularSubmission(dataMarketAddress string) string {
+	return fmt.Sprintf("%s.%s", pkgs.LastRegularSubmissionKey, strings.ToLower(dataMarketAddress))
+}
+
 func GetSnapshotterSlotSubmissionsHtable(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
 	return fmt.Sprintf("snapshotter:%s:%s:%d:slot_submissions", strings.ToLower(dataMarketAddress), strings.ToLower(snapshotterAddress), slotID)
 }
