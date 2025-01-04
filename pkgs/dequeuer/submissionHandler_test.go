@@ -86,7 +86,6 @@ func TestPairContractIndexCalculation(t *testing.T) {
 
 	// Mocked return values for the function inputs
 	snapshotterIntVal := getSnapshotterIntValue(snapshotterAddr) // Assume this hash is calculated correctly
-	fmt.Println("Snapshotter hash is: ", snapshotterIntVal)
 
 	currentDay := big.NewInt(40) // Mocked value for current day
 

@@ -2,7 +2,6 @@ package redis
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sequencer-dequeuer/config"
@@ -59,10 +58,12 @@ func SetSubmission(ctx context.Context, key string, value string, set string, ex
 		reporting.SendFailureNotification("Redis error", err.Error(), time.Now().String(), "High")
 		return err
 	}
+
 	if err := RedisClient.Set(ctx, key, value, expiration).Err(); err != nil {
 		reporting.SendFailureNotification("Redis error", err.Error(), time.Now().String(), "High")
 		return err
 	}
+
 	return nil
 }
 
@@ -81,23 +82,6 @@ func Get(ctx context.Context, key string) (string, error) {
 
 func Set(ctx context.Context, key, value string, expiration time.Duration) error {
 	return RedisClient.Set(ctx, key, value, expiration).Err()
-}
-
-// Save log to Redis
-func SetProcessLog(ctx context.Context, key string, logEntry map[string]interface{}, exp time.Duration) error {
-	data, err := json.Marshal(logEntry)
-	if err != nil {
-		reporting.SendFailureNotification("Redis SetProcessLog marshalling", err.Error(), time.Now().String(), "High")
-		return fmt.Errorf("failed to marshal log entry: %w", err)
-	}
-
-	err = RedisClient.Set(ctx, key, data, exp).Err()
-	if err != nil {
-		reporting.SendFailureNotification("Redis error", err.Error(), time.Now().String(), "High")
-		return fmt.Errorf("failed to set log entry in Redis: %w", err)
-	}
-
-	return nil
 }
 
 func Incr(ctx context.Context, key string) (int64, error) {

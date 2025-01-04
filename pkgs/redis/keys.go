@@ -29,10 +29,6 @@ func ContractStateVariable(varName string) string {
 	return fmt.Sprintf("ProtocolState.%s", varName)
 }
 
-func ContractStateVariableWithDataMarketAddress(dataMarketAddress string, varName string) string {
-	return fmt.Sprintf("ProtocolState.%s.%s", strings.ToLower(dataMarketAddress), varName)
-}
-
 func SlotEpochSubmissionCountExceeded(dataMarketAddress string, slotId string, epochId uint64) string {
 	return fmt.Sprintf("SlotEpochSubmissionCountExceeded.%s.%s.%d", strings.ToLower(dataMarketAddress), slotId, epochId)
 }
@@ -53,10 +49,6 @@ func SlotEpochSubmissionsKey(dataMarketAddress string, slotId string, epochId ui
 	return fmt.Sprintf("SlotEpochCounter.%s.%s.%d", strings.ToLower(dataMarketAddress), slotId, epochId)
 }
 
-func TriggeredProcessLog(process, identifier string) string {
-	return fmt.Sprintf("%s.%s.%s", pkgs.ProcessTriggerKey, process, identifier)
-}
-
 func GetSnapshotterSlotSubmissionsHtable(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
 	return fmt.Sprintf("snapshotter:%s:%s:%d:slot_submissions", strings.ToLower(dataMarketAddress), strings.ToLower(snapshotterAddress), slotID)
 }
@@ -67,14 +59,6 @@ func GetSnapshotterSubmissionCountInSlot(dataMarketAddress string, snapshotterAd
 
 func GetSnapshotterNodeVersion(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
 	return fmt.Sprintf("snapshotter:%s:%s:%d:node_version", strings.ToLower(dataMarketAddress), strings.ToLower(snapshotterAddress), slotID)
-}
-
-func SlotSubmissionSetByDay(dataMarketAddress string, day string) string {
-	return fmt.Sprintf("%s.%s.%s", pkgs.SlotSubmissionsKey, strings.ToLower(dataMarketAddress), day)
-}
-
-func SlotSubmissionKey(dataMarketAddress string, slotId, day string) string {
-	return fmt.Sprintf("%s.%s.%s.%s", pkgs.SlotSubmissionsKey, strings.ToLower(dataMarketAddress), day, slotId)
 }
 
 func DataMarketCurrentDay(dataMarketAddress string) string {

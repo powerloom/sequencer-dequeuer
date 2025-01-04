@@ -2,24 +2,25 @@ package pkgs
 
 import "time"
 
-const CurrentEpoch = "CurrentEpochID"
-const CurrentDay = "CurrentDay"
-const CollectorKey = "SnapshotCollector"
-const TxsKey = "SnapshotTransactions"
-const TimeSlotKey = "TimeSlotPreference"
-const SlotSubmissionsKey = "SlotSubmissionsKey"
-const DaySubmissionsKey = "DaySubmissionsKey"
-const Day = 24 * time.Hour
-const RewardTxKey = "RewardTx"
-const DayBuffer = 0
-const EpochsPerDay = 3
-const DailyRewardPointsKey = "DailyRewardPointsKey"
-const TotalRewardPointsKey = "TotalRewardPointsKey"
-const TaskCompletionKey = "TaskCompletionKey"
-const SlotStreakKey = "SlotStreakKey"
-const DayCounterKey = "DayCounterKey"
-const EpochSubmissionsCountKey = "EpochSubmissionsCountKey"
-const FlaggedSnapshotterKey = "FlaggedSnapshotterKey"
-const EpochSubmissionsKey = "EpochSubmissionsKey"
-const ProcessTriggerKey = "TriggeredSequencerProcess"
-const SequencerDayKey = "SequencerState.Day"
+// Process Name Constants
+// process : identifier
+const (
+	VerifyAndStoreSubmission = "SequencerDequeuer: VerifyAndStoreSubmission"
+)
+
+// General Key Constants
+const (
+	CurrentDay               = "CurrentDay"
+	CurrentEpoch             = "CurrentEpochID"
+	CollectorKey             = "SnapshotCollector"
+	FlaggedSnapshotterKey    = "FlaggedSnapshotterKey"
+	EpochSubmissionsCountKey = "EpochSubmissionsCountKey"
+	EpochSubmissionsKey      = "EpochSubmissionsKey"
+)
+
+// General Constants
+const (
+	Day          = 24 * time.Hour
+	DayBuffer    = 0
+	EpochsPerDay = 3
+)
