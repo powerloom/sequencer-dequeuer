@@ -61,8 +61,8 @@ func LastSimulationSubmission(dataMarketAddress string) string {
 	return fmt.Sprintf("%s.%s", pkgs.LastSimulationSubmissionKey, strings.ToLower(dataMarketAddress))
 }
 
-func LastRegularSubmission(dataMarketAddress string) string {
-	return fmt.Sprintf("%s.%s", pkgs.LastRegularSubmissionKey, strings.ToLower(dataMarketAddress))
+func LastSnapshotSubmission(dataMarketAddress string) string {
+	return fmt.Sprintf("%s.%s", pkgs.LastSnapshotSubmissionKey, strings.ToLower(dataMarketAddress))
 }
 
 func GetSnapshotterSlotSubmissionsHtable(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
