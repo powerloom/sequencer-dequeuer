@@ -58,10 +58,12 @@ func SetSubmission(ctx context.Context, key string, value string, set string, ex
 		reporting.SendFailureNotification("Redis error", err.Error(), time.Now().String(), "High")
 		return err
 	}
+
 	if err := RedisClient.Set(ctx, key, value, expiration).Err(); err != nil {
 		reporting.SendFailureNotification("Redis error", err.Error(), time.Now().String(), "High")
 		return err
 	}
+
 	return nil
 }
 
