@@ -49,12 +49,12 @@ func SlotEpochSubmissionsKey(dataMarketAddress string, slotId string, epochId ui
 	return fmt.Sprintf("SlotEpochCounter.%s.%s.%d", strings.ToLower(dataMarketAddress), slotId, epochId)
 }
 
-func LastSimulatedSubmission(dataMarketAddress string, slotId uint64) string {
-	return fmt.Sprintf("%s.%s.%d", pkgs.LastSimulatedSubmissionKey, strings.ToLower(dataMarketAddress), slotId)
+func LastSimulatedSubmission(dataMarketAddress string, slotID uint64) string {
+	return fmt.Sprintf("%s.%s.%d", pkgs.LastSimulatedSubmissionKey, strings.ToLower(dataMarketAddress), slotID)
 }
 
-func LastSnapshotSubmission(dataMarketAddress string, slotId uint64) string {
-	return fmt.Sprintf("%s.%s.%d", pkgs.LastSnapshotSubmissionKey, strings.ToLower(dataMarketAddress), slotId)
+func LastSnapshotSubmission(dataMarketAddress string, slotID uint64) string {
+	return fmt.Sprintf("%s.%s.%d", pkgs.LastSnapshotSubmissionKey, strings.ToLower(dataMarketAddress), slotID)
 }
 
 func GetSnapshotterSlotSubmissionsHtable(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
