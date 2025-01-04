@@ -12,19 +12,26 @@ import (
 )
 
 func main() {
+	// Initiate logger
 	utils.InitLogger()
+
+	// Load the config object
 	config.LoadConfig()
 
+	// Initialize reporting service
 	service.InitializeReportingService(config.SettingsObj.SlackReportingUrl, 5*time.Second)
+
+	// Setup redis
+	redis.RedisClient = redis.NewRedisClient()
+
+	// Set up the RPC client and contract instance
+	prost.ConfigureClient()
+	prost.ConfigureContractInstance()
 
 	var wg sync.WaitGroup
 
-	prost.ConfigureClient()
-	prost.ConfigureContractInstance()
-	redis.RedisClient = redis.NewRedisClient()
-
 	wg.Add(1)
 	dequeuer.SubmissionHandlerInstance = &dequeuer.SubmissionHandler{}
-	go dequeuer.SubmissionHandlerInstance.Start()
+	go dequeuer.SubmissionHandlerInstance.Start() // Start submission handler
 	wg.Wait()
 }

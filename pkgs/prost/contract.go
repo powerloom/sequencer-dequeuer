@@ -18,10 +18,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var Instance *protocolStateContractABIGen.Contract
-
 var (
-	Client *ethclient.Client
+	Client   *ethclient.Client
+	Instance *protocolStateContractABIGen.Contract
 )
 
 func ConfigureClient() {
@@ -31,6 +30,7 @@ func ConfigureClient() {
 	}
 	Client = ethclient.NewClient(rpcClient)
 }
+
 func ConfigureContractInstance() {
 	Instance, _ = protocolStateContractABIGen.NewContract(common.HexToAddress(config.SettingsObj.ContractAddress), Client)
 }
@@ -50,28 +50,6 @@ func MustQuery[K any](ctx context.Context, call func() (val K, err error)) (K, e
 		return *new(K), err
 	}
 	return val, err
-}
-
-func getExpirationTime(epochID, daySize int64, epochsInADay int64) time.Time {
-	// DAY_SIZE in microseconds
-	updatedDaySize := time.Duration(daySize) * time.Microsecond
-
-	// Calculate the duration of each epoch
-	epochDuration := updatedDaySize / time.Duration(epochsInADay)
-
-	// Calculate the number of epochs left for the day
-	remainingEpochs := epochID % int64(epochsInADay)
-
-	// Calculate the expiration duration
-	expirationDuration := epochDuration * time.Duration(remainingEpochs)
-
-	// Set a buffer of 10 seconds to expire slightly earlier
-	bufferDuration := 10 * time.Second
-
-	// Calculate the expiration time by subtracting the buffer duration
-	expirationTime := time.Now().Add(expirationDuration - bufferDuration)
-
-	return expirationTime
 }
 
 // FetchCurrentDay fetches the current day from the contract and caches the result in Redis

@@ -81,7 +81,7 @@ func LoadConfig() {
 		log.Debugf("DATA_MARKET_ADDRESSES environment variable: %v", dataMarketAddressesList)
 	}
 
-	chainId, err := strconv.ParseInt(getEnv("CHAIN_ID", ""), 10, 64)
+	chainID, err := strconv.ParseInt(getEnv("CHAIN_ID", ""), 10, 64)
 	if err != nil {
 		log.Fatalf("Failed to parse CHAIN_ID environment variable: %v", err)
 	}
@@ -103,7 +103,7 @@ func LoadConfig() {
 		RedisDB:                         getEnv("REDIS_DB", ""),
 		VerifySubmissionDataSourceIndex: verifySubmissionDataSourceIndex,
 		FullNodes:                       fullNodesList,
-		ChainID:                         chainId,
+		ChainID:                         chainID,
 		DataSourcesByMarket:             make(map[string][]string), // Initialize empty map
 	}
 
