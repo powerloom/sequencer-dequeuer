@@ -87,9 +87,9 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		log.Debugln("Received simulated submission: ", details.submission.String())
 
 		// Key to track the last simulation submission
-		simulationKey := redis.LastSimulationSubmission(details.dataMarketAddress)
+		simulationKey := redis.LastSimulatedSubmission(details.dataMarketAddress)
 		if err := redis.RedisClient.Set(context.Background(), simulationKey, time.Now().Unix(), 5*time.Minute).Err(); err != nil {
-			log.Errorf("Failed to set last simulation timestamp in Redis: %v", err)
+			log.Errorf("Failed to set last simulated submission timestamp in Redis: %v", err)
 			return fmt.Errorf("redis client failure: %s", err.Error())
 		}
 
@@ -297,7 +297,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			// Key to track the last snapshot submission for a released epoch
 			snapshotKey := redis.LastSnapshotSubmission(details.dataMarketAddress)
 			if err := redis.RedisClient.Set(context.Background(), snapshotKey, time.Now().Unix(), 5*time.Minute).Err(); err != nil {
-				log.Errorf("Failed to set last snapshot timestamp in Redis: %v", err)
+				log.Errorf("Failed to set last snapshot submission timestamp in Redis: %v", err)
 				return fmt.Errorf("redis client failure: %s", err.Error())
 			}
 		}

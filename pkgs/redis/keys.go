@@ -57,8 +57,8 @@ func TriggeredProcessLog(process, identifier string) string {
 	return fmt.Sprintf("%s.%s.%s", pkgs.ProcessTriggerKey, process, identifier)
 }
 
-func LastSimulationSubmission(dataMarketAddress string) string {
-	return fmt.Sprintf("%s.%s", pkgs.LastSimulationSubmissionKey, strings.ToLower(dataMarketAddress))
+func LastSimulatedSubmission(dataMarketAddress string) string {
+	return fmt.Sprintf("%s.%s", pkgs.LastSimulatedSubmissionKey, strings.ToLower(dataMarketAddress))
 }
 
 func LastSnapshotSubmission(dataMarketAddress string) string {
