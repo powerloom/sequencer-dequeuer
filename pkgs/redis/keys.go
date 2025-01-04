@@ -49,6 +49,18 @@ func SlotEpochSubmissionsKey(dataMarketAddress string, slotId string, epochId ui
 	return fmt.Sprintf("SlotEpochCounter.%s.%s.%d", strings.ToLower(dataMarketAddress), slotId, epochId)
 }
 
+func TriggeredProcessLog(process, identifier string) string {
+	return fmt.Sprintf("%s.%s.%s", pkgs.ProcessTriggerKey, process, identifier)
+}
+
+func LastSimulatedSubmission(dataMarketAddress string) string {
+	return fmt.Sprintf("%s.%s", pkgs.LastSimulatedSubmissionKey, strings.ToLower(dataMarketAddress))
+}
+
+func LastSnapshotSubmission(dataMarketAddress string) string {
+	return fmt.Sprintf("%s.%s", pkgs.LastSnapshotSubmissionKey, strings.ToLower(dataMarketAddress))
+}
+
 func GetSnapshotterSlotSubmissionsHtable(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
 	return fmt.Sprintf("snapshotter:%s:%s:%d:slot_submissions", strings.ToLower(dataMarketAddress), strings.ToLower(snapshotterAddress), slotID)
 }
