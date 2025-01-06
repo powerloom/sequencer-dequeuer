@@ -82,8 +82,35 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		return fmt.Errorf("snapshot submission rejected: snapshotter %s is flagged", snapshotterAddr.Hex())
 	}
 
-	if details.submission.Request.EpochId == 0 {
-		log.Infof("Received simulated submission: %s", details.submission.String())
+	// Check if epochId field exists in the raw JSON
+	rawJSON, err := json.Marshal(details.submission.Request)
+	if err != nil {
+		log.Errorf("Failed to marshal request: %v", err)
+		return err
+	}
+
+	var rawRequest map[string]interface{}
+	if err := json.Unmarshal(rawJSON, &rawRequest); err != nil {
+		log.Errorf("Failed to unmarshal request to map: %v", err)
+		return err
+	}
+
+	// Check if epochId field exists and is explicitly set to 0
+	_, epochIdExists := rawRequest["epochId"]
+	if !epochIdExists || details.submission.Request.EpochId == 0 {
+		log.Infof("Received simulated submission from slot %d for data market %s: %s",
+			details.submission.Request.SlotId,
+			details.dataMarketAddress,
+			details.submission.String())
+
+		// Key to track the last simulation submission
+		simulationKey := redis.LastSimulatedSubmission(details.dataMarketAddress, details.submission.Request.SlotId)
+		if err := redis.RedisClient.Set(context.Background(), simulationKey, time.Now().Unix(), 5*time.Minute).Err(); err != nil {
+			log.Errorf("Failed to set last simulated submission timestamp in Redis: %v", err)
+			return fmt.Errorf("redis client failure: %s", err.Error())
+		} else {
+			log.Infof("🫣 Successfully set last simulated submission timestamp in Redis for slot %d for data market %s: %s", details.submission.Request.SlotId, details.dataMarketAddress, simulationKey)
+		}
 
 		var address common.Address
 		retryErr := backoff.Retry(func() error {
@@ -149,7 +176,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 		// Construct the Redis key for the snapshotter's last ping
 		lastPingKey := fmt.Sprintf("lastPing:%s:%s", snapshotterAddr.Hex(), strconv.Itoa(int(details.submission.Request.SlotId)))
-		if err := redis.RedisClient.Set(context.Background(), lastPingKey, time.Now().Unix(), 0); err != nil {
+		if err := redis.RedisClient.Set(context.Background(), lastPingKey, time.Now().Unix(), 0).Err(); err != nil {
 			log.Errorf("Failed to write to Redis: %v", err)
 			return fmt.Errorf("redis client failure: %v", err)
 		}
@@ -285,6 +312,15 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			if errMsg != "" {
 				log.Debugln("Snapshot submission rejected: ", errMsg)
 				return errors.New("invalid snapshot")
+			}
+
+			// Key to track the last snapshot submission for a released epoch for a specific slot
+			snapshotKey := redis.LastSnapshotSubmission(details.dataMarketAddress, details.submission.Request.SlotId)
+			if err := redis.RedisClient.Set(context.Background(), snapshotKey, time.Now().Unix(), 5*time.Minute).Err(); err != nil {
+				log.Errorf("Failed to set last snapshot submission timestamp in Redis for slot %d for data market %s: %v", details.submission.Request.SlotId, details.dataMarketAddress, err)
+				return fmt.Errorf("redis client failure: %s", err.Error())
+			} else {
+				log.Infof("🫣 Successfully set last snapshot submission timestamp in Redis for slot %d for data market %s: %s", details.submission.Request.SlotId, details.dataMarketAddress, snapshotKey)
 			}
 		}
 	}
