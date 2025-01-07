@@ -105,7 +105,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 		// Key to track the last simulation submission
 		simulationKey := redis.LastSimulatedSubmission(details.dataMarketAddress, details.submission.Request.SlotId)
-		if err := redis.RedisClient.Set(context.Background(), simulationKey, time.Now().Unix(), 5*time.Minute).Err(); err != nil {
+		if err := redis.RedisClient.Set(context.Background(), simulationKey, time.Now().Unix(), 0).Err(); err != nil {
 			log.Errorf("Failed to set last simulated submission timestamp in Redis: %v", err)
 			return fmt.Errorf("redis client failure: %s", err.Error())
 		} else {
@@ -316,7 +316,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 			// Key to track the last snapshot submission for a released epoch for a specific slot
 			snapshotKey := redis.LastSnapshotSubmission(details.dataMarketAddress, details.submission.Request.SlotId)
-			if err := redis.RedisClient.Set(context.Background(), snapshotKey, time.Now().Unix(), 5*time.Minute).Err(); err != nil {
+			if err := redis.RedisClient.Set(context.Background(), snapshotKey, time.Now().Unix(), 0).Err(); err != nil {
 				log.Errorf("Failed to set last snapshot submission timestamp in Redis for slot %d for data market %s: %v", details.submission.Request.SlotId, details.dataMarketAddress, err)
 				return fmt.Errorf("redis client failure: %s", err.Error())
 			} else {
