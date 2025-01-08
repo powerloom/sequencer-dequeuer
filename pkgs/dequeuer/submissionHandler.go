@@ -60,10 +60,10 @@ func (sh *SubmissionHandler) Start() {
 	sh.startSubmissionDequeuer()
 }
 
-// TODO: Update verification logic
+// verifyAndStoreSubmission verifies the submission and stores it in Redis
 func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) error {
+	// Recover the snapshotter address from the signature
 	snapshotterAddr, err := utils.RecoverAddress(utils.HashRequest(details.submission.Request), common.Hex2Bytes(details.submission.Signature))
-	// TODO: This can be an incorrect submission altogether - check need for reporting
 	if err != nil {
 		log.Errorf("Failed to recover snapshotter address: %s", err.Error())
 		return fmt.Errorf("snapshotter address recovery error: %s", err.Error())
@@ -73,16 +73,18 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	flaggedSnapshotterKey := redis.FlaggedSnapshotterKey(details.dataMarketAddress)
 	isFlagged, err := redis.RedisClient.SIsMember(context.Background(), flaggedSnapshotterKey, snapshotterAddr.Hex()).Result()
 	if err != nil {
-		log.Errorf("Error querying Redis for flagged snapshotters for data market %s: %v", details.dataMarketAddress, err)
+		log.Errorf("Error querying Redis for flagged snapshotters for data market address %s: %v", details.dataMarketAddress, err)
 		return fmt.Errorf("redis query error: %s", err.Error())
 	}
 
 	if isFlagged {
-		log.Debugf("Submission from flagged snapshotter for data market %s: %s", details.dataMarketAddress, snapshotterAddr.Hex())
+		errMsg := fmt.Sprintf("Submission from flagged snapshotter for data market address %s: %s", details.dataMarketAddress, snapshotterAddr.Hex())
+		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+		log.Debug(errMsg)
 		return fmt.Errorf("snapshot submission rejected: snapshotter %s is flagged", snapshotterAddr.Hex())
 	}
 
-	// Check if epochId field exists in the raw JSON
+	// Check if epochID field exists in the raw JSON
 	rawJSON, err := json.Marshal(details.submission.Request)
 	if err != nil {
 		log.Errorf("Failed to marshal request: %v", err)
@@ -95,21 +97,20 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		return err
 	}
 
-	// Check if epochId field exists and is explicitly set to 0
-	_, epochIdExists := rawRequest["epochId"]
-	if !epochIdExists || details.submission.Request.EpochId == 0 {
-		log.Infof("Received simulated submission from slot %d for data market %s: %s",
-			details.submission.Request.SlotId,
-			details.dataMarketAddress,
-			details.submission.String())
+	// Check if epochID field exists and is explicitly set to 0
+	_, epochIDExists := rawRequest["epochId"]
+	if !epochIDExists || details.submission.Request.EpochId == 0 {
+		log.Infof("Received simulated submission from slot %d for data market address %s: %s", details.submission.Request.SlotId, details.dataMarketAddress, details.submission.String())
 
 		// Key to track the last simulation submission
 		simulationKey := redis.LastSimulatedSubmission(details.dataMarketAddress, details.submission.Request.SlotId)
 		if err := redis.RedisClient.Set(context.Background(), simulationKey, time.Now().Unix(), 0).Err(); err != nil {
-			log.Errorf("Failed to set last simulated submission timestamp in Redis: %v", err)
+			errMsg := fmt.Sprintf("Failed to set last simulated submission timestamp for slot %d, data market address %s in Redis: %s", details.submission.Request.SlotId, details.dataMarketAddress, err.Error())
+			reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+			log.Error(errMsg)
 			return fmt.Errorf("redis client failure: %s", err.Error())
 		} else {
-			log.Infof("🫣 Successfully set last simulated submission timestamp in Redis for slot %d for data market %s: %s", details.submission.Request.SlotId, details.dataMarketAddress, simulationKey)
+			log.Infof("🫣 Successfully set last simulated submission timestamp for slot %d, data market address %s: %s", details.submission.Request.SlotId, details.dataMarketAddress, simulationKey)
 		}
 
 		var address common.Address
@@ -123,8 +124,10 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		}
 
 		if address.Hex() != snapshotterAddr.Hex() {
-			log.Errorf("Incorrect snapshotter address: %s", snapshotterAddr.Hex())
-			return fmt.Errorf("snapshotter address not the one configured in slot: %s", snapshotterAddr.Hex())
+			errMsg := fmt.Sprintf("Snapshotter address %s not the one configured in slot %d", snapshotterAddr.Hex(), details.submission.Request.SlotId)
+			reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+			log.Error(errMsg)
+			return fmt.Errorf("snapshotter address not the one configured in slot %d: %s", details.submission.Request.SlotId, snapshotterAddr.Hex())
 		}
 
 		key := redis.GetSnapshotterSubmissionCountInSlot(details.dataMarketAddress, snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
@@ -170,7 +173,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		// Attempt to save the submission data to Redis
 		submissionsHashKey := redis.GetSnapshotterSlotSubmissionsHtable(details.dataMarketAddress, snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
 		if err := redis.RedisClient.HSet(context.Background(), submissionsHashKey, details.submission.Request.EpochId, jsonData).Err(); err != nil {
-			log.Errorf("Failed to write to Redis: %v", err)
+			log.Errorf("Failed to save submission data to Redis: %v", err)
 			return fmt.Errorf("redis client failure: %s", err.Error())
 		}
 
@@ -205,10 +208,8 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			// AllSnapshotters state check to be added
 			var errMsg string
 			if snapshotterAddr.Hex() != slotInfo.SnapshotterAddress.Hex() {
-				errMsg = fmt.Sprintf("Incorrect snapshotter address extracted %s for specified slot %d: %s",
-					snapshotterAddr.Hex(),
-					details.submission.Request.SlotId,
-					slotInfo.SnapshotterAddress.Hex())
+				errMsg = fmt.Sprintf("Incorrect snapshotter address extracted %s for specified slot %d from slotInfo: %s", snapshotterAddr.Hex(), details.submission.Request.SlotId, slotInfo.SnapshotterAddress.Hex())
+				reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 			} else {
 				if config.SettingsObj.VerifySubmissionDataSourceIndex {
 					log.Debugf(
@@ -218,6 +219,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 						details.submission.Request.EpochId,
 						details.submission.Request.ProjectId,
 					)
+
 					// Extract the contract address from the projectID
 					projectData := strings.Split(details.submission.Request.ProjectId, ":")
 
@@ -228,13 +230,17 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 					// Get the contract address from the project data
 					extractedContractAddr := strings.ToLower(projectData[1])
-					// for the data market address, get the data sources list
+
+					// Retrieve the list of data sources associated with the specified data market address
 					dataSourcesList := config.SettingsObj.DataSourcesByMarket[strings.ToLower(details.dataMarketAddress)]
 					if dataSourcesList == nil {
-						log.Errorf("No data sources found for data market %s (lowercase: %s)", details.dataMarketAddress, strings.ToLower(details.dataMarketAddress))
-						return fmt.Errorf("no data sources configured for data market %s", details.dataMarketAddress)
+						errMsg := fmt.Sprintf("Data source configuration missing for data market: %s (lowercase: %s)", details.dataMarketAddress, strings.ToLower(details.dataMarketAddress))
+						reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+						log.Error(errMsg)
+						return fmt.Errorf("no data sources found for the specified data market: %s", details.dataMarketAddress)
 					}
 
+					// Fetch the data source index for the submission
 					dataSourceIndex, err := fetchDataSourceIndex(
 						details.dataMarketAddress,
 						int64(details.submission.Request.EpochId),
@@ -242,6 +248,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 						int64(len(dataSourcesList)),
 						snapshotterAddr,
 					)
+
 					// Retrieve the contract address corresponding to the calculated pair contract index
 					expectedContractAddr := strings.ToLower(dataSourcesList[dataSourceIndex])
 					log.Debugf(
@@ -253,8 +260,9 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 						expectedContractAddr,
 					)
 					if err != nil {
-						reporting.SendFailureNotification("verifyAndStoreSubmission", fmt.Sprint("Failed to fetch pair contract index: ", err.Error()), time.Now().String(), "High")
-						log.Error("Failed to fetch pair contract index: ", err.Error())
+						errMsg = fmt.Sprintf("Failed to fetch pair contract index: %s", err.Error())
+						reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+						log.Error(errMsg)
 					}
 
 					if expectedContractAddr != extractedContractAddr {
@@ -288,39 +296,48 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 						details.submission.Request.ProjectId,
 					)
 				}
+
+				// Check if the submission is valid
 				currentEpochStr, _ := redis.Get(context.Background(), redis.CurrentEpoch(details.dataMarketAddress))
 				log.Debugf("Current epoch for data market %s: %s", details.dataMarketAddress, currentEpochStr)
 				if currentEpochStr == "" {
-					errMsg = fmt.Sprintf("Current epochId not stored in redis for data market %s encountered while processing submission by snapshotter %s, epoch %d", details.dataMarketAddress, snapshotterAddr.Hex(), details.submission.Request.EpochId)
+					errMsg = fmt.Sprintf("Current epochID not stored in redis for data market %s encountered while processing submission by snapshotter %s, epoch %d", details.dataMarketAddress, snapshotterAddr.Hex(), details.submission.Request.EpochId)
 					reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 					log.Error(errMsg)
 				} else {
 					currentEpoch, err := strconv.Atoi(currentEpochStr)
 					if err != nil {
-						reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, fmt.Sprintf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error()), time.Now().String(), "High")
-						log.Errorf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error())
+						errMsg = fmt.Sprintf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error())
+						reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+						log.Error(errMsg)
 					} else if diff := uint64(currentEpoch) - details.submission.Request.EpochId; diff > 1 {
-						errMsg = "Incorrect epochId supplied in request"
+						errMsg = "Incorrect epochID supplied in request"
+						reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+						log.Error(errMsg)
 					}
 				}
-				// TODO: check for submission count exceeded in the current epoch for specific data market
+
 				epochSubmissionExceededKey := redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
 				if val, _ := redis.Get(context.Background(), epochSubmissionExceededKey); val != "" {
-					errMsg = "Slot epoch submission count exceeded for slot ID " + strconv.FormatUint(details.submission.Request.SlotId, 10)
+					errMsg = fmt.Sprintf("Slot epoch submission count exceeded for slotID %d", details.submission.Request.SlotId)
+					reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+					log.Error(errMsg)
 				}
 			}
 			if errMsg != "" {
-				log.Debugln("Snapshot submission rejected: ", errMsg)
+				log.Debugf("Snapshot submission rejected: %s", errMsg)
 				return errors.New("invalid snapshot")
 			}
 
 			// Key to track the last snapshot submission for a released epoch for a specific slot
 			snapshotKey := redis.LastSnapshotSubmission(details.dataMarketAddress, details.submission.Request.SlotId)
 			if err := redis.RedisClient.Set(context.Background(), snapshotKey, time.Now().Unix(), 0).Err(); err != nil {
-				log.Errorf("Failed to set last snapshot submission timestamp in Redis for slot %d for data market %s: %v", details.submission.Request.SlotId, details.dataMarketAddress, err)
+				errMsg := fmt.Sprintf("Failed to set last snapshot submission timestamp for slot %d, data market address %s in Redis: %v", details.submission.Request.SlotId, details.dataMarketAddress, err)
+				reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+				log.Error(errMsg)
 				return fmt.Errorf("redis client failure: %s", err.Error())
 			} else {
-				log.Infof("🫣 Successfully set last snapshot submission timestamp in Redis for slot %d for data market %s: %s", details.submission.Request.SlotId, details.dataMarketAddress, snapshotKey)
+				log.Infof("🫣 Successfully set last snapshot submission timestamp for slot %d, data market address %s: %s", details.submission.Request.SlotId, details.dataMarketAddress, snapshotKey)
 			}
 		}
 	}
@@ -350,7 +367,9 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 	// Store the submission in Redis
 	if err := redis.SetSubmission(context.Background(), submissionKey, value, submissionSetByHeaderKey, 20*time.Minute); err != nil {
-		log.Errorf("Error setting submission in Redis (slot ID: %s, epoch ID: %d, project ID: %s): %s", strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId, details.submission.Request.ProjectId, err.Error())
+		errMsg := fmt.Sprintf("Failed to set submission (slot ID: %d, epoch ID: %d, project ID: %s) in Redis: %s", details.submission.Request.SlotId, details.submission.Request.EpochId, details.submission.Request.ProjectId, err.Error())
+		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+		log.Error(errMsg)
 		return err
 	}
 
@@ -365,9 +384,8 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	}
 
 	// Increment submission count for this epoch
-	err = redis.RedisClient.Incr(context.Background(), redis.EpochSubmissionsCount(details.dataMarketAddress, details.submission.Request.EpochId)).Err()
-	if err != nil {
-		errMsg := fmt.Sprintf("Error incrementing epochsubmissions: %v", err)
+	if err := redis.RedisClient.Incr(context.Background(), redis.EpochSubmissionsCount(details.dataMarketAddress, details.submission.Request.EpochId)).Err(); err != nil {
+		errMsg := fmt.Sprintf("Error incrementing epoch submissions count: %s", err.Error())
 		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 		log.Error(errMsg)
 	}
@@ -393,23 +411,23 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	}
 
 	if !isFullNode(snapshotterAddr.Hex()) {
-		slotEpochCounterKey := redis.SlotEpochSubmissionsKey(details.dataMarketAddress, strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId)
+		slotID := strconv.FormatUint(details.submission.Request.SlotId, 10)
+		slotEpochCounterKey := redis.SlotEpochSubmissionsKey(details.dataMarketAddress, slotID, details.submission.Request.EpochId)
 		count, err := redis.Incr(context.Background(), slotEpochCounterKey)
 		if err != nil {
 			log.Errorf("Failed to increment slot epoch counter: %v", err)
 			return fmt.Errorf("redis client failure: %s", err.Error())
 		} else {
 			if count > 2 {
-				errMsg := fmt.Sprintf("Slot epoch submission count exceeded for slot ID %s", strconv.FormatUint(details.submission.Request.SlotId, 10))
-				log.Errorln("Slot epoch submission count exceeded: ", errMsg)
-				if err := redis.Set(
-					context.Background(),
-					redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, strconv.FormatUint(details.submission.Request.SlotId, 10), details.submission.Request.EpochId),
-					"true",
-					5*time.Minute,
-				); err != nil {
-					log.Error(errMsg)
-					return errors.New(errMsg)
+				errMsg := fmt.Sprintf("Slot epoch submission count exceeded for slot %s", slotID)
+				reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+				log.Error(errMsg)
+
+				// Set a flag in Redis to indicate that the submission count exceeded
+				redisKey := redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, slotID, details.submission.Request.EpochId)
+				if err := redis.Set(context.Background(), redisKey, "true", 5*time.Minute); err != nil {
+					log.Errorf("Failed to set Redis flag for exceeded submission count: %s", err.Error())
+					return fmt.Errorf("failed to set Redis flag: %s", err.Error())
 				}
 			}
 		}
