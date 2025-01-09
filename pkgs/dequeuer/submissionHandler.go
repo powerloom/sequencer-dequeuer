@@ -78,9 +78,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	}
 
 	if isFlagged {
-		errMsg := fmt.Sprintf("Submission from flagged snapshotter for data market %s: %s", details.dataMarketAddress, snapshotterAddr.Hex())
-		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
-		log.Debug(errMsg)
+		log.Debugf("Submission from flagged snapshotter for data market %s: %s", details.dataMarketAddress, snapshotterAddr.Hex())
 		return fmt.Errorf("snapshot submission rejected: snapshotter %s is flagged", snapshotterAddr.Hex())
 	}
 
@@ -419,9 +417,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			return fmt.Errorf("redis client failure: %s", err.Error())
 		} else {
 			if count > 2 {
-				errMsg := fmt.Sprintf("Slot epoch submission count exceeded for slot %s", slotID)
-				reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
-				log.Error(errMsg)
+				log.Errorf("Slot epoch submission count exceeded for slot %s", slotID)
 
 				// Set a flag in Redis to indicate that the submission count exceeded
 				redisKey := redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, slotID, details.submission.Request.EpochId)
