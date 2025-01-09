@@ -508,13 +508,20 @@ func (s *SubmissionHandler) startSubmissionDequeuer() {
 			log.Errorln("Missing or invalid 'data_market_address' in queue data")
 			continue
 		}
-
 		dataMarketAddress := common.HexToAddress(dataMarketAddressStr)
-
 		// Check if the data market address is in the set of data markets
 		if !config.SettingsObj.IsValidDataMarketAddress(dataMarketAddress) {
 			log.Errorln("Data market address not found in the set of data markets")
 			continue
+		}
+
+		// Increment total incoming submission count for this data market
+		totalCountKey := redis.TotalIncomingSubmissionCount(dataMarketAddressStr)
+		if _, err := redis.Incr(context.Background(), totalCountKey); err != nil {
+			log.Errorf("Failed to increment total incoming submission count: %v", err)
+			// Continue processing even if increment fails
+		} else {
+			log.Debugf("Incremented total incoming submission count for data market %s", dataMarketAddressStr)
 		}
 
 		submissionIDStr, ok := queueData["submission_id"].(string)

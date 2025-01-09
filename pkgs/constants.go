@@ -10,14 +10,15 @@ const (
 
 // General Key Constants
 const (
-	CurrentDay                 = "CurrentDay"
-	CurrentEpoch               = "CurrentEpochID"
-	CollectorKey               = "SnapshotCollector"
-	FlaggedSnapshotterKey      = "FlaggedSnapshotterKey"
-	EpochSubmissionsCountKey   = "EpochSubmissionsCountKey"
-	EpochSubmissionsKey        = "EpochSubmissionsKey"
-	LastSimulatedSubmissionKey = "LastSimulatedSubmissionKey"
-	LastSnapshotSubmissionKey  = "LastSnapshotSubmissionKey"
+	CurrentDay                      = "CurrentDay"
+	CurrentEpoch                    = "CurrentEpochID"
+	CollectorKey                    = "SnapshotCollector"
+	FlaggedSnapshotterKey           = "FlaggedSnapshotterKey"
+	EpochSubmissionsCountKey        = "EpochSubmissionsCountKey"
+	EpochSubmissionsKey             = "EpochSubmissionsKey"
+	LastSimulatedSubmissionKey      = "LastSimulatedSubmissionKey"
+	LastSnapshotSubmissionKey       = "LastSnapshotSubmissionKey"
+	TotalIncomingSubmissionCountKey = "TotalIncomingSubmissionCountKey"
 )
 
 // General Constants
