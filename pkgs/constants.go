@@ -10,7 +10,7 @@ const (
 
 // General Key Constants
 const (
-	CurrentDay                      = "CurrentDay"
+	CurrentDay                      = "CurrentDayKey"
 	CurrentEpoch                    = "CurrentEpochID"
 	CollectorKey                    = "SnapshotCollector"
 	FlaggedSnapshotterKey           = "FlaggedSnapshotterKey"

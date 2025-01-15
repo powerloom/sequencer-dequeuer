@@ -1,1 +1,1 @@
-docker build -t proto-snapshot-dequeuer . --no-cache
+docker build -t sequencer-dequeuer . --no-cache
