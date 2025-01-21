@@ -90,6 +90,13 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		log.Error(errMsg)
 		return err
 	}
+	// unmarshal slotInfoStr to slotInfo
+	if err := json.Unmarshal([]byte(slotInfoStr), &slotInfo); err != nil {
+		errMsg := fmt.Sprintf("Failed to unmarshal slotInfo: %s", err.Error())
+		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+		log.Error(errMsg)
+		return err
+	}
 
 	if snapshotterAddr.Hex() != slotInfo.SnapshotterAddress.Hex() {
 		errMsg := fmt.Sprintf("Incorrect snapshotter address extracted %s for specified slot %d from slotInfo: %s", snapshotterAddr.Hex(), details.submission.Request.SlotId, slotInfo.SnapshotterAddress.Hex())
