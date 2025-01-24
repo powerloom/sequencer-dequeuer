@@ -36,6 +36,10 @@ type Settings struct {
 	SlackReportingUrl               string
 	RedisDB                         string
 	DataSourcesByMarket             map[string][]string
+	// number of epochs behind current epoch whose submissions are accepted
+	// this is a function of the epoch size that depends on the source chain block time,
+	// and the snapshot submission window that depends on Powerloom chain block time
+	EpochAcceptanceWindow int
 }
 
 // Add this new method to the Settings struct
@@ -91,6 +95,11 @@ func LoadConfig() {
 		log.Fatalf("Failed to parse VERIFY_SUBMISSION_DATA_SOURCE_INDEX environment variable: %v", err)
 	}
 
+	epochAcceptanceWindow, err := strconv.Atoi(getEnv("EPOCH_ACCEPTANCE_WINDOW", "1"))
+	if err != nil {
+		log.Fatalf("Failed to parse EPOCH_ACCEPTANCE_WINDOW environment variable: %v", err)
+	}
+
 	// Create the config object first
 	config := Settings{
 		ClientUrl:                       getEnv("PROST_RPC_URL", ""),
@@ -105,6 +114,7 @@ func LoadConfig() {
 		FullNodes:                       fullNodesList,
 		ChainID:                         chainID,
 		DataSourcesByMarket:             make(map[string][]string), // Initialize empty map
+		EpochAcceptanceWindow:           epochAcceptanceWindow,
 	}
 
 	// Set the global SettingsObj

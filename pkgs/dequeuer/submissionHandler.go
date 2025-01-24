@@ -275,8 +275,8 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 				errMsg = fmt.Sprintf("Cannot parse epoch %s stored in redis: %s", currentEpochStr, err.Error())
 				reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 				log.Error(errMsg)
-			} else if diff := uint64(currentEpoch) - details.submission.Request.EpochId; diff > 1 {
-				errMsg = "Incorrect epochID supplied in request"
+			} else if diff := uint64(currentEpoch) - details.submission.Request.EpochId; diff > uint64(config.SettingsObj.EpochAcceptanceWindow) {
+				errMsg = fmt.Sprintf("Incorrect epochID supplied in request: %d, current epoch: %d, slot ID: %d", details.submission.Request.EpochId, currentEpoch, details.submission.Request.SlotId)
 				reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 				log.Error(errMsg)
 			}
