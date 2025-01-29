@@ -9,11 +9,9 @@ import (
 	"sequencer-dequeuer/config"
 	protocolStateContractABIGen "sequencer-dequeuer/pkgs/contract"
 	"sequencer-dequeuer/pkgs/redis"
-	"sequencer-dequeuer/pkgs/snapshotterStateContract"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -21,9 +19,8 @@ import (
 )
 
 var (
-	Client                   *ethclient.Client
-	Instance                 *protocolStateContractABIGen.Contract
-	SnapshotterStateInstance *snapshotterStateContract.SnapshotterStateContract
+	Client   *ethclient.Client
+	Instance *protocolStateContractABIGen.Contract
 )
 
 func ConfigureClient() {
@@ -36,21 +33,6 @@ func ConfigureClient() {
 
 func ConfigureContractInstance() {
 	Instance, _ = protocolStateContractABIGen.NewContract(common.HexToAddress(config.SettingsObj.ContractAddress), Client)
-}
-
-func ConfigureSnapshotterStateContractInstance() {
-	// Extract snapshotter state contract address
-	snapshotterStateAddress, err := Instance.SnapshotterState(&bind.CallOpts{})
-	if err != nil {
-		log.Errorf("Error fetching snapshotter state address: %s", err.Error())
-	}
-
-	// Initialize snapshotter state contract instance
-	snapshotterStateInstance, err := snapshotterStateContract.NewSnapshotterStateContract(snapshotterStateAddress, Client)
-	if err != nil {
-		log.Fatalf("Failed to create snapshotter state contract instance: %v", err)
-	}
-	SnapshotterStateInstance = snapshotterStateInstance
 }
 
 func MustQuery[K any](ctx context.Context, call func() (val K, err error)) (K, error) {
