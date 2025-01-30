@@ -53,6 +53,10 @@ func LastSimulatedSubmission(dataMarketAddress string, slotID uint64) string {
 	return fmt.Sprintf("%s.%s.%d", pkgs.LastSimulatedSubmissionKey, strings.ToLower(dataMarketAddress), slotID)
 }
 
+func TotalIncomingSubmissionCount(dataMarketAddress string) string {
+	return fmt.Sprintf("%s.%s", pkgs.TotalIncomingSubmissionCountKey, strings.ToLower(dataMarketAddress))
+}
+
 func LastSnapshotSubmission(dataMarketAddress string, slotID uint64) string {
 	return fmt.Sprintf("%s.%s.%d", pkgs.LastSnapshotSubmissionKey, strings.ToLower(dataMarketAddress), slotID)
 }
@@ -70,5 +74,5 @@ func GetSnapshotterNodeVersion(dataMarketAddress string, snapshotterAddress stri
 }
 
 func DataMarketCurrentDay(dataMarketAddress string) string {
-	return fmt.Sprintf("%s.%s", strings.ToLower(dataMarketAddress), pkgs.CurrentDay)
+	return fmt.Sprintf("%s.%s", pkgs.CurrentDay, strings.ToLower(dataMarketAddress))
 }
