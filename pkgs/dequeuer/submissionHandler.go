@@ -300,6 +300,22 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			log.Errorf("Failed to save submission data to Redis: %v", err)
 			return fmt.Errorf("redis client failure: %s", err.Error())
 		}
+		// delete old submissions for this slot
+		if err := redis.RedisClient.HDel(context.Background(), submissionsHashKey, strconv.FormatUint(details.submission.Request.EpochId-30, 10)).Err(); err != nil {
+			log.Errorf(
+				"Nonexistent or Failed to delete old submissions for slot %d epoch %d: %v",
+				details.submission.Request.SlotId,
+				details.submission.Request.EpochId-30,
+				err,
+			)
+		} else {
+			log.Debugf(
+				"🚮 Deleted old submissions for slot %d epoch %d snapshotter %s",
+				details.submission.Request.SlotId,
+				details.submission.Request.EpochId-30,
+				snapshotterAddr.Hex(),
+			)
+		}
 
 		// Construct the Redis key for the snapshotter's last ping
 		lastPingKey := fmt.Sprintf("lastPing:%s:%s", snapshotterAddr.Hex(), strconv.Itoa(int(details.submission.Request.SlotId)))
