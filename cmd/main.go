@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs/dequeuer"
 	"sequencer-dequeuer/pkgs/prost"
@@ -33,5 +34,10 @@ func main() {
 	wg.Add(1)
 	dequeuer.SubmissionHandlerInstance = &dequeuer.SubmissionHandler{}
 	go dequeuer.SubmissionHandlerInstance.Start() // Start submission handler
+
+	// Start cleanup routine
+	ctx := context.Background()
+	dequeuer.StartCleanupRoutine(ctx, config.SettingsObj.DataMarketAddresses)
+
 	wg.Wait()
 }
