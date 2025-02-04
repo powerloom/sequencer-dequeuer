@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"sequencer-dequeuer/config"
 	"sequencer-dequeuer/pkgs"
-	protocolStateABIGen "sequencer-dequeuer/pkgs/contract"
 	"sequencer-dequeuer/pkgs/prost"
 	"sequencer-dequeuer/pkgs/redis"
 	"sequencer-dequeuer/pkgs/reporting"
@@ -42,6 +41,19 @@ type SnapshotData struct {
 	SnapshotCID string
 	ProjectID   string
 	Timestamp   int64
+}
+
+type SlotInfo struct {
+	SnapshotterAddress common.Address // address
+	NodePrice          *big.Int       // uint256
+	AmountSentOnL1     *big.Int       // uint256
+	MintedOn           *big.Int       // uint256
+	BurnedOn           *big.Int       // uint256
+	LastUpdated        *big.Int       // uint256
+	IsLegacy           bool           // bool
+	ClaimedTokens      bool           // bool
+	Active             bool           // bool
+	IsKyced            bool           // bool
 }
 
 func isFullNode(addr string) bool {
@@ -82,7 +94,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 	var errMsg string
 	// check for slot ID to extracted snapshotter address from protocol state cacher
-	var slotInfo protocolStateABIGen.PowerloomDataMarketSlotInfo
+	var slotInfo SlotInfo
 	slotInfoStr, err := redis.Get(context.Background(), redis.SlotInfo(strconv.FormatUint(details.submission.Request.SlotId, 10)))
 	if err != nil {
 		errMsg := fmt.Sprintf("Failed to unmarshal slotInfo: %s", slotInfoStr)
