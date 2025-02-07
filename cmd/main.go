@@ -30,9 +30,13 @@ func main() {
 
 	var wg sync.WaitGroup
 
+	// Start submission handler
 	wg.Add(1)
 	dequeuer.SubmissionHandlerInstance = &dequeuer.SubmissionHandler{}
-	go dequeuer.SubmissionHandlerInstance.Start() // Start submission handler
+	go func() {
+		defer wg.Done()
+		dequeuer.SubmissionHandlerInstance.Start()
+	}()
 
 	wg.Wait()
 }
