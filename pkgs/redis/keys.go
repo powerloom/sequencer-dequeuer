@@ -76,3 +76,7 @@ func GetSnapshotterNodeVersion(dataMarketAddress string, snapshotterAddress stri
 func DataMarketCurrentDay(dataMarketAddress string) string {
 	return fmt.Sprintf("%s.%s", pkgs.CurrentDay, strings.ToLower(dataMarketAddress))
 }
+
+func ActiveSnapshottersForEpoch(dataMarketAddress string, epochID uint64) string {
+	return fmt.Sprintf("%s.%s.%d", pkgs.ActiveSnapshottersForEpoch, strings.ToLower(dataMarketAddress), epochID)
+}
