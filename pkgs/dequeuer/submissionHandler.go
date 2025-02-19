@@ -388,6 +388,19 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		details.submission.Request.ProjectId,
 	)
 
+	// Add snapshotter to a set of active snapshotters for this epoch after verifying the submission
+	activeSnapshottersKey := redis.ActiveSnapshottersForEpoch(details.dataMarketAddress, details.submission.Request.EpochId)
+	if err := redis.RedisClient.SAdd(context.Background(), activeSnapshottersKey, snapshotterAddr.Hex()).Err(); err != nil {
+		errMsg := fmt.Sprintf("Error tracking active snapshotter: %s", err.Error())
+		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+		log.Error(errMsg)
+	}
+
+	// Set expiry for the active snapshotters set at 48 hours
+	if err := redis.RedisClient.Expire(context.Background(), activeSnapshottersKey, 48*time.Hour).Err(); err != nil {
+		log.Errorf("Failed to set expiry for active snapshotters set: %v", err)
+	}
+
 	// Expire the submission set by header key after 30 minutes
 	if err := redis.RedisClient.Expire(context.Background(), submissionSetByHeaderKey, 30*time.Minute).Err(); err != nil {
 		errMsg := fmt.Sprintf("Failed to set expiry for submission set by header key: %v", err)
