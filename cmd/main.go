@@ -33,5 +33,6 @@ func main() {
 	wg.Add(1)
 	dequeuer.SubmissionHandlerInstance = &dequeuer.SubmissionHandler{}
 	go dequeuer.SubmissionHandlerInstance.Start() // Start submission handler
+
 	wg.Wait()
 }
