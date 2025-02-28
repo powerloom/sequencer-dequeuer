@@ -388,10 +388,10 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		details.submission.Request.ProjectId,
 	)
 
-	// Add snapshotter to a set of active snapshotters for this epoch after verifying the submission
+	// Add slot to a set of active slots for this epoch after verifying the submission
 	activeSnapshottersKey := redis.ActiveSnapshottersForEpoch(details.dataMarketAddress, details.submission.Request.EpochId)
-	if err := redis.RedisClient.SAdd(context.Background(), activeSnapshottersKey, snapshotterAddr.Hex()).Err(); err != nil {
-		errMsg := fmt.Sprintf("Error tracking active snapshotter: %s", err.Error())
+	if err := redis.RedisClient.SAdd(context.Background(), activeSnapshottersKey, strconv.FormatUint(details.submission.Request.SlotId, 10)).Err(); err != nil {
+		errMsg := fmt.Sprintf("Error tracking active slot: %s", err.Error())
 		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 		log.Error(errMsg)
 	}
