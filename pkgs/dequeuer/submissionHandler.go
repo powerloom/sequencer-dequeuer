@@ -14,6 +14,7 @@ import (
 	"sequencer-dequeuer/pkgs/utils"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -32,6 +33,9 @@ type SubmissionDetails struct {
 }
 
 type SubmissionHandler struct {
+	// Keep track of epochs for which we've already set expiry
+	expirySetActiveSnapshottersForEpoch     map[string]bool
+	expirySetActiveSnapshottersForEpochLock sync.RWMutex
 }
 
 type SnapshotData struct {
@@ -66,6 +70,12 @@ func isFullNode(addr string) bool {
 }
 
 func (sh *SubmissionHandler) Start() {
+	// Initialize the expiry tracking map
+	sh.expirySetActiveSnapshottersForEpoch = make(map[string]bool)
+
+	// Start a cleanup goroutine
+	go sh.periodicActiveExpiryReset()
+
 	// Implement the submission handling logic here
 	sh.startSubmissionDequeuer()
 }
@@ -435,8 +445,12 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	activeSnapshottersKey := redis.ActiveSnapshottersForEpoch(details.dataMarketAddress, details.submission.Request.EpochId)
 	activeSnapshottersCmd := pipe.SAdd(context.Background(), activeSnapshottersKey, strconv.FormatUint(details.submission.Request.SlotId, 10))
 
-	// Set expiry for the active snapshotters set at 48 hours
-	activeSnapshottersExpireCmd := pipe.Expire(context.Background(), activeSnapshottersKey, 48*time.Hour)
+	// Only set expiry if it hasn't been set before for this epoch
+	var activeSnapshottersExpireCmd *redis.BoolCmd
+	if !s.isActiveSnapshotterExpirySetForEpoch(details.dataMarketAddress, details.submission.Request.EpochId) {
+		activeSnapshottersExpireCmd = pipe.Expire(context.Background(), activeSnapshottersKey, 48*time.Hour)
+		// We'll mark it as set after successful execution
+	}
 
 	// Marshal the submission data to store in Redis
 	submissionJSON, err := json.Marshal(details.submission)
@@ -486,16 +500,22 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		details.submission.Request.ProjectId,
 	)
 
+	// If we set the expiry, check if it was successful and mark it
+	if activeSnapshottersExpireCmd != nil {
+		if err := activeSnapshottersExpireCmd.Err(); err != nil {
+			log.Errorf("Failed to set expiry for active snapshotters set: %v", err)
+		} else {
+			// Mark that we've set expiry for this epoch
+			s.markActiveSnapshotterExpirySetForEpoch(details.dataMarketAddress, details.submission.Request.EpochId)
+			log.Debugf("Set expiry for active snapshotters for epoch %d", details.submission.Request.EpochId)
+		}
+	}
+
 	// Check activeSnapshottersCmd result
 	if err := activeSnapshottersCmd.Err(); err != nil {
 		errMsg := fmt.Sprintf("Error tracking active slot: %s", err.Error())
 		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 		log.Error(errMsg)
-	}
-
-	// Check activeSnapshottersExpireCmd result
-	if err := activeSnapshottersExpireCmd.Err(); err != nil {
-		log.Errorf("Failed to set expiry for active snapshotters set: %v", err)
 	}
 
 	// Check submissionSetExpireCmd result
@@ -686,5 +706,43 @@ func (s *SubmissionHandler) startSubmissionDequeuer() {
 		}
 
 		log.Infof("✅ Successfully verified and stored submission with ID: %s", submissionDetails.submissionID.String())
+	}
+}
+
+// isActiveSnapshotterExpirySetForEpoch checks if expiry has already been set for this data market and epoch
+func (s *SubmissionHandler) isActiveSnapshotterExpirySetForEpoch(dataMarketAddress string, epochID uint64) bool {
+	key := fmt.Sprintf("%s:%d", dataMarketAddress, epochID)
+
+	s.expirySetActiveSnapshottersForEpochLock.RLock()
+	isSet := s.expirySetActiveSnapshottersForEpoch[key]
+	s.expirySetActiveSnapshottersForEpochLock.RUnlock()
+
+	return isSet
+}
+
+// markActiveSnapshotterExpirySetForEpoch marks that expiry has been set for this data market and epoch
+func (s *SubmissionHandler) markActiveSnapshotterExpirySetForEpoch(dataMarketAddress string, epochID uint64) {
+	key := fmt.Sprintf("%s:%d", dataMarketAddress, epochID)
+
+	s.expirySetActiveSnapshottersForEpochLock.Lock()
+	s.expirySetActiveSnapshottersForEpoch[key] = true
+	s.expirySetActiveSnapshottersForEpochLock.Unlock()
+}
+
+// periodicActiveExpiryReset recreates the tracking map at regular intervals
+func (s *SubmissionHandler) periodicActiveExpiryReset() {
+	// Reset every 24 hours
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		s.expirySetActiveSnapshottersForEpochLock.Lock()
+		// Log the reset with the map size
+		mapSize := len(s.expirySetActiveSnapshottersForEpoch)
+		log.Infof("Resetting expirySetActiveSnapshottersForEpoch map (size was %d entries)", mapSize)
+
+		// Create a new map
+		s.expirySetActiveSnapshottersForEpoch = make(map[string]bool)
+		s.expirySetActiveSnapshottersForEpochLock.Unlock()
 	}
 }
