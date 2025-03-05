@@ -313,7 +313,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		// Don't return on errors since we need to handle missing keys gracefully
 
 		// Process the current epoch result
-		var errMsg string
 		currentEpochStr, err := currentEpochStrCmd.Result()
 		if err != nil {
 			log.Errorf("Error getting current epoch: %v", err)
