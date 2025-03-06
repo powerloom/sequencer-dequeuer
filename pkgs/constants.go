@@ -19,6 +19,7 @@ const (
 	LastSimulatedSubmissionKey      = "LastSimulatedSubmissionKey"
 	LastSnapshotSubmissionKey       = "LastSnapshotSubmissionKey"
 	TotalIncomingSubmissionCountKey = "TotalIncomingSubmissionCountKey"
+	ActiveSnapshottersForEpoch      = "ActiveSnapshottersForEpoch"
 )
 
 // General Constants
