@@ -15,6 +15,8 @@ import (
 
 var RedisClient *redis.Client
 
+type BoolCmd = redis.BoolCmd
+
 // TODO: Pool size failures to be checked
 func NewRedisClient() *redis.Client {
 	db, err := strconv.Atoi(config.SettingsObj.RedisDB)
