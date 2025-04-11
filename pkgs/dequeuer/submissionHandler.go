@@ -412,9 +412,9 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		log.Error(errMsg)
 	}
 
-	// Only set expiry if it hasn't been set before for this epoch
+	// sets the expiry status in-memory as well so we dont make round trips to redis for this
 	if !s.isActiveSnapshotterExpirySetForEpoch(details.dataMarketAddress, details.submission.Request.EpochId) {
-		if err := redis.RedisClient.Expire(context.Background(), activeSnapshottersKey, 48*time.Hour).Err(); err != nil {
+		if err := redis.RedisClient.Expire(context.Background(), activeSnapshottersKey, 30*time.Minute).Err(); err != nil {
 			log.Errorf("Failed to set expiry for active snapshotters set: %v", err)
 		} else {
 			// Mark that we've set expiry for this epoch
@@ -550,14 +550,7 @@ func (s *SubmissionHandler) startSubmissionDequeuer() {
 			continue
 		}
 
-		// Increment total incoming submission count for this data market
-		totalCountKey := redis.TotalIncomingSubmissionCount(dataMarketAddressStr)
-		if _, err := redis.Incr(context.Background(), totalCountKey); err != nil {
-			log.Errorf("Failed to increment total incoming submission count: %v", err)
-			// Continue processing even if increment fails
-		} else {
-			log.Debugf("Incremented total incoming submission count for data market %s", dataMarketAddressStr)
-		}
+		// REMOVED: Increment all-time total of incoming submission count for this data market. This metric is useless.
 
 		submissionIDStr, ok := queueData["submission_id"].(string)
 		if !ok {
@@ -623,8 +616,8 @@ func (s *SubmissionHandler) markActiveSnapshotterExpirySetForEpoch(dataMarketAdd
 
 // periodicActiveExpiryReset recreates the tracking map at regular intervals
 func (s *SubmissionHandler) periodicActiveExpiryReset() {
-	// Reset every 24 hours
-	ticker := time.NewTicker(24 * time.Hour)
+	// Reset every 30 minutes to avoid memory leaks
+	ticker := time.NewTicker(30 * time.Minute)
 	defer ticker.Stop()
 
 	for range ticker.C {
