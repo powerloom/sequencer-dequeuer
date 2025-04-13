@@ -89,6 +89,30 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		return fmt.Errorf("snapshotter address recovery error: %s", err.Error())
 	}
 
+	// Log and store node version if present, otherwise set default version
+	var nodeVersion string
+	if details.submission.NodeVersion != nil && *details.submission.NodeVersion != "" {
+		nodeVersion = *details.submission.NodeVersion
+	} else {
+		nodeVersion = "v0.0.0"
+	}
+
+	log.Infof("📦 Node version %s detected for slot %d, project %s, epoch %d, data market %s",
+		nodeVersion,
+		details.submission.Request.SlotId,
+		details.submission.Request.ProjectId,
+		details.submission.Request.EpochId,
+		details.dataMarketAddress)
+
+	// Store node version in Redis
+	nodeVersionKey := redis.GetSnapshotterNodeVersion(
+		details.dataMarketAddress,
+		snapshotterAddr.Hex(),
+		new(big.Int).SetUint64(details.submission.Request.SlotId))
+	if err := redis.Set(context.Background(), nodeVersionKey, nodeVersion, 0); err != nil {
+		log.Errorf("Failed to store node version in Redis: %v", err)
+	}
+
 	// Verify if the snapshotter address is included in the set of flagged accounts in Redis
 	flaggedSnapshotterKey := redis.FlaggedSnapshotterKey(details.dataMarketAddress)
 	isFlagged, err := redis.RedisClient.SIsMember(context.Background(), flaggedSnapshotterKey, snapshotterAddr.Hex()).Result()
@@ -164,20 +188,11 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 	projectData := strings.Split(details.submission.Request.ProjectId, "|")
 
-	var projectIDFormatted, nodeVersion string
+	var projectIDFormatted string
 	if len(projectData) == 1 {
 		projectIDFormatted = projectData[0]
-		nodeVersion = "v0.0.0"
 	} else {
 		projectIDFormatted = strings.Join(projectData[:len(projectData)-1], "|")
-		nodeVersion = projectData[len(projectData)-1]
-	}
-
-	// Set the node version in Redis
-	snapshotterNodeVersionKey := redis.GetSnapshotterNodeVersion(details.dataMarketAddress, snapshotterAddr.Hex(), new(big.Int).SetUint64(details.submission.Request.SlotId))
-	if err := redis.Set(context.Background(), snapshotterNodeVersionKey, nodeVersion, 0); err != nil {
-		log.Errorf("Failed to set node version in Redis: %v", err)
-		return fmt.Errorf("failed to set node version in Redis: %s", err.Error())
 	}
 
 	data := SnapshotData{
@@ -469,6 +484,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			return fmt.Errorf("redis client failure: %s", err.Error())
 		}
 	}
+
 	return nil
 }
 
