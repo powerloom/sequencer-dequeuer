@@ -69,8 +69,8 @@ func GetSnapshotterSubmissionCountInSlot(dataMarketAddress string, snapshotterAd
 	return fmt.Sprintf("snapshotter:%s:%s:%d:submission_count", strings.ToLower(dataMarketAddress), strings.ToLower(snapshotterAddress), slotID)
 }
 
-func GetSnapshotterNodeVersion(dataMarketAddress string, snapshotterAddress string, slotID *big.Int) string {
-	return fmt.Sprintf("snapshotter:%s:%s:%d:node_version", strings.ToLower(dataMarketAddress), strings.ToLower(snapshotterAddress), slotID)
+func GetSnapshotterNodeVersion(dataMarketAddress string, slotID *big.Int) string {
+	return fmt.Sprintf("snapshotter:%s:%d:node_version", strings.ToLower(dataMarketAddress), slotID)
 }
 
 func DataMarketCurrentDay(dataMarketAddress string) string {

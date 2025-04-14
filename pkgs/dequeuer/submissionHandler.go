@@ -107,7 +107,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	// Store node version in Redis
 	nodeVersionKey := redis.GetSnapshotterNodeVersion(
 		details.dataMarketAddress,
-		snapshotterAddr.Hex(),
 		new(big.Int).SetUint64(details.submission.Request.SlotId))
 	if err := redis.Set(context.Background(), nodeVersionKey, nodeVersion, 0); err != nil {
 		log.Errorf("Failed to store node version in Redis: %v", err)
