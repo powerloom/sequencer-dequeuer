@@ -36,7 +36,6 @@ type SubmissionHandler struct {
 	// Keep track of epochs for which we've already set expiry
 	expirySetActiveSnapshottersForEpoch     map[string]bool
 	expirySetActiveSnapshottersForEpochLock sync.RWMutex
-	slotLocks                               sync.Map // Map to hold mutexes for slot IDs
 }
 
 type SnapshotData struct {
@@ -112,18 +111,10 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	// Optimistic Increment & Lock for non-full nodes
 	if !isFullNode(snapshotterAddr.Hex()) {
 		slotIDStr = strconv.FormatUint(details.submission.Request.SlotId, 10)
-		slotMutexInterface, _ := s.slotLocks.LoadOrStore(slotIDStr, &sync.Mutex{})
-		slotMutex := slotMutexInterface.(*sync.Mutex)
-
-		slotMutex.Lock() // Lock before incrementing and checking
-		log.Debugf("🔒 Lock acquired for slotID: %s", slotIDStr)
-
 		slotEpochCounterKey = redis.SlotEpochSubmissionsKey(details.dataMarketAddress, slotIDStr, details.submission.Request.EpochId)
 		var count int64
 		count, err = redis.Incr(context.Background(), slotEpochCounterKey)
 		if err != nil {
-			log.Debugf("🔓 Releasing lock for slotID: %s (increment failed)", slotIDStr)
-			slotMutex.Unlock()
 			log.Errorf("Failed to increment slot epoch counter %s: %v", slotEpochCounterKey, err)
 			err = fmt.Errorf("redis client failure incrementing count key %s: %w", slotEpochCounterKey, err)
 			return err
@@ -152,14 +143,9 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			}
 			submissionCountIncremented = false
 
-			log.Debugf("🔓 Releasing lock for slotID: %s (count exceeded)", slotIDStr)
-			slotMutex.Unlock()
 			err = fmt.Errorf("slot epoch submission count exceeded for slot %s", slotIDStr)
 			return err
 		}
-
-		log.Debugf("🔓 Releasing lock for slotID: %s (increment successful, count: %d)", slotIDStr, count)
-		slotMutex.Unlock() // Unlock after successful increment and check
 	}
 
 	// Log and store node version if present, otherwise set default version
