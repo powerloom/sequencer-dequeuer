@@ -89,6 +89,36 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		return fmt.Errorf("snapshotter address recovery error: %s", err.Error())
 	}
 
+	if !isFullNode(snapshotterAddr.Hex()) {
+		slotID := strconv.FormatUint(details.submission.Request.SlotId, 10)
+		slotEpochCounterKey := redis.SlotEpochSubmissionsKey(details.dataMarketAddress, slotID, details.submission.Request.EpochId)
+		count, err := redis.Incr(context.Background(), slotEpochCounterKey)
+		if err != nil {
+			log.Errorf("Failed to increment slot epoch counter: %v", err)
+			return fmt.Errorf("redis client failure: %s", err.Error())
+		} else {
+			if count > 2 {
+				log.Errorf("Slot epoch submission count exceeded for slot %s", slotID)
+
+				// Set a flag in Redis to indicate that the submission count exceeded
+				redisKey := redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, slotID, details.submission.Request.EpochId)
+				if err := redis.Set(context.Background(), redisKey, "true", 5*time.Minute); err != nil {
+					log.Errorf("Failed to set Redis flag for exceeded submission count: %s", err.Error())
+					// Decide if this failure should prevent submission or just be logged
+					// For now, log and continue, but return the main error below
+				}
+				// Return error as the count is exceeded
+				return fmt.Errorf("slot epoch submission count exceeded for slot %s", slotID)
+			}
+		}
+
+		// Set the expiry for the slot epoch counter key
+		if err := redis.RedisClient.Expire(context.Background(), slotEpochCounterKey, 5*time.Minute).Err(); err != nil {
+			log.Errorf("Failed to set expiry for slot epoch counter %s: %v", slotEpochCounterKey, err)
+			// Log the error but don't fail the entire submission just for this
+		}
+	}
+
 	// Log and store node version if present, otherwise set default version
 	var nodeVersion string
 	if details.submission.NodeVersion != nil && *details.submission.NodeVersion != "" {
@@ -455,33 +485,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	if err := redis.RedisClient.Expire(context.Background(), epochSubmissionKey, 30*time.Minute).Err(); err != nil {
 		log.Errorf("Failed to set expiry for epoch submissions hash table %s: %v", epochSubmissionKey, err)
 		return fmt.Errorf("redis client failure: %s", err.Error())
-	}
-
-	if !isFullNode(snapshotterAddr.Hex()) {
-		slotID := strconv.FormatUint(details.submission.Request.SlotId, 10)
-		slotEpochCounterKey := redis.SlotEpochSubmissionsKey(details.dataMarketAddress, slotID, details.submission.Request.EpochId)
-		count, err := redis.Incr(context.Background(), slotEpochCounterKey)
-		if err != nil {
-			log.Errorf("Failed to increment slot epoch counter: %v", err)
-			return fmt.Errorf("redis client failure: %s", err.Error())
-		} else {
-			if count > 2 {
-				log.Errorf("Slot epoch submission count exceeded for slot %s", slotID)
-
-				// Set a flag in Redis to indicate that the submission count exceeded
-				redisKey := redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, slotID, details.submission.Request.EpochId)
-				if err := redis.Set(context.Background(), redisKey, "true", 5*time.Minute); err != nil {
-					log.Errorf("Failed to set Redis flag for exceeded submission count: %s", err.Error())
-					return fmt.Errorf("failed to set Redis flag: %s", err.Error())
-				}
-			}
-		}
-
-		// Set the expiry for the slot epoch counter key
-		if err := redis.RedisClient.Expire(context.Background(), slotEpochCounterKey, 5*time.Minute).Err(); err != nil {
-			log.Errorf("Failed to set expiry for slot epoch counter %s: %v", slotEpochCounterKey, err)
-			return fmt.Errorf("redis client failure: %s", err.Error())
-		}
 	}
 
 	return nil
