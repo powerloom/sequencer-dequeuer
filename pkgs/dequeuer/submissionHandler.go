@@ -663,10 +663,11 @@ func (s *SubmissionHandler) startSubmissionDequeuer() {
 		log.Infof("🔄 Processing submission with ID %s for data market address %s with request details %+v", submissionDetails.submissionID.String(), submissionDetails.dataMarketAddress, submissionDetails.submission.Request)
 
 		if err := s.verifyAndStoreSubmission(submissionDetails); err != nil {
-			log.Errorf("Failed to verify and store submission with ID '%s': %s", submissionDetails.submissionID.String(), err.Error())
+			log.Errorf("❌ Failed to verify and store submission with ID '%s': %s", submissionDetails.submissionID.String(), err.Error())
+		} else {
+			// Log success only if verifyAndStoreSubmission returned nil error
+			log.Infof("✅ Successfully verified and stored submission with ID: %s", submissionDetails.submissionID.String())
 		}
-
-		log.Infof("✅ Successfully verified and stored submission with ID: %s", submissionDetails.submissionID.String())
 	}
 }
 
