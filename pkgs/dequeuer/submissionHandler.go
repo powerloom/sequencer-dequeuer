@@ -95,7 +95,8 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			if errDecr := redis.RedisClient.Decr(context.Background(), slotEpochCounterKey).Err(); errDecr != nil {
 				log.Warnf("Failed to decrement slot epoch counter %s after failed submission: %v", slotEpochCounterKey, errDecr)
 			} else {
-				log.Debugf("Decremented slot epoch counter %s after failed submission", slotEpochCounterKey)
+				// Log the successful decrement due to failure
+				log.Debugf("🔒🔄 Decremented slot epoch counter %s due to submission failure after initial increment", slotEpochCounterKey)
 			}
 		}
 	}()
@@ -115,11 +116,13 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		slotMutex := slotMutexInterface.(*sync.Mutex)
 
 		slotMutex.Lock() // Lock before incrementing and checking
+		log.Debugf("🔒 Lock acquired for slotID: %s", slotIDStr)
 
 		slotEpochCounterKey = redis.SlotEpochSubmissionsKey(details.dataMarketAddress, slotIDStr, details.submission.Request.EpochId)
 		var count int64
 		count, err = redis.Incr(context.Background(), slotEpochCounterKey)
 		if err != nil {
+			log.Debugf("🔓 Releasing lock for slotID: %s (increment failed)", slotIDStr)
 			slotMutex.Unlock()
 			log.Errorf("Failed to increment slot epoch counter %s: %v", slotEpochCounterKey, err)
 			err = fmt.Errorf("redis client failure incrementing count key %s: %w", slotEpochCounterKey, err)
@@ -127,6 +130,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		}
 
 		submissionCountIncremented = true
+		log.Debugf("🔒📈 Incremented slot epoch counter %s to %d", slotEpochCounterKey, count) // Log successful increment
 
 		// Set expiry for the counter key right after incrementing
 		if errExp := redis.RedisClient.Expire(context.Background(), slotEpochCounterKey, 5*time.Minute).Err(); errExp != nil {
@@ -143,14 +147,18 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			// Decrement the counter as this submission is rejected due to exceeding the limit
 			if errDecr := redis.RedisClient.Decr(context.Background(), slotEpochCounterKey).Err(); errDecr != nil {
 				log.Warnf("Failed to decrement slot epoch counter %s after exceeding limit: %v", slotEpochCounterKey, errDecr)
+			} else {
+				log.Debugf("🔒🔄 Decremented slot epoch counter %s because limit was exceeded (count: %d)", slotEpochCounterKey, count)
 			}
 			submissionCountIncremented = false
 
+			log.Debugf("🔓 Releasing lock for slotID: %s (count exceeded)", slotIDStr)
 			slotMutex.Unlock()
 			err = fmt.Errorf("slot epoch submission count exceeded for slot %s", slotIDStr)
 			return err
 		}
 
+		log.Debugf("🔓 Releasing lock for slotID: %s (increment successful, count: %d)", slotIDStr, count)
 		slotMutex.Unlock() // Unlock after successful increment and check
 	}
 
@@ -524,6 +532,18 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 	// If submission setting was successful, prevent the defer from decrementing the counter
 	decrementGuard = true
+
+	// Log final state after successful submission setting
+	if submissionCountIncremented {
+		// Fetch the latest count for logging purposes if it was incremented
+		finalCountStr, _ := redis.Get(context.Background(), slotEpochCounterKey)
+		log.Debugf("✅ Successfully set submission and incremented count for slot %s (final count string: '%s')", slotIDStr, finalCountStr)
+	} else if isFullNode(snapshotterAddr.Hex()) {
+		log.Debugf("✅ Successfully set submission for slot %s (full node, no count increment)", new(big.Int).SetUint64(details.submission.Request.SlotId).String())
+	} else {
+		// This case should technically not be hit if the logic is correct, but included for completeness
+		log.Debugf("✅ Successfully set submission for slot %s (non-full node, count already existed or increment failed previously?)", slotIDStr)
+	}
 
 	return nil
 }
