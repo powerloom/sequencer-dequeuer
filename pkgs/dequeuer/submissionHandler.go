@@ -465,69 +465,64 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	}
 
 	value := fmt.Sprintf("%s.%s", details.submissionID.String(), protojson.Format(details.submission))
+	submissionJSON, err := json.Marshal(details.submission)
+	if err != nil {
+		log.Errorf("Error serializing submission for pipeline: %v", err)
+		err = fmt.Errorf("json marshalling error: %s", err.Error()) // Set named error
+		return err                                                  // Defer handles decrement
+	}
 
-	// Create the submission set key
+	// Prepare keys
 	submissionSetByHeaderKey := redis.SubmissionSetByHeaderKey(
 		details.dataMarketAddress,
 		details.submission.Request.EpochId,
 		details.submission.Header,
 	)
+	activeSnapshottersKey := redis.ActiveSnapshottersForEpoch(details.dataMarketAddress, details.submission.Request.EpochId)
+	epochSubmissionKey := redis.EpochSubmissionsKey(details.dataMarketAddress, details.submission.Request.EpochId)
+	slotIDStrForActiveSet := strconv.FormatUint(details.submission.Request.SlotId, 10)
 
-	// Store the submission in Redis
-	if err := redis.SetSubmission(context.Background(), submissionKey, value, submissionSetByHeaderKey, 20*time.Minute); err != nil {
-		errMsg := fmt.Sprintf("Failed to set submission (slot ID: %d, epoch ID: %d, project ID: %s) in Redis: %s",
-			details.submission.Request.SlotId, details.submission.Request.EpochId, details.submission.Request.ProjectId, err.Error())
+	// Start Redis Pipeline
+	ctx := context.Background()
+	pipe := redis.RedisClient.Pipeline()
+	defer pipe.Close()
+
+	log.Debugf("🚀 Starting Redis pipeline for submission ID %s", details.submissionID.String())
+
+	// Queue commands equivalent to SetSubmission(submissionKey, value, submissionSetByHeaderKey, 20m)
+	pipe.SAdd(ctx, submissionSetByHeaderKey, submissionKey) // Add the key to the set
+	pipe.Expire(ctx, submissionSetByHeaderKey, 20*time.Minute)
+	pipe.Set(ctx, submissionKey, value, 20*time.Minute)
+
+	// Queue adding slot to active set
+	pipe.SAdd(ctx, activeSnapshottersKey, slotIDStrForActiveSet)
+
+	// Queue expiry for active set
+	shouldSetExpiry := !s.isActiveSnapshotterExpirySetForEpoch(details.dataMarketAddress, details.submission.Request.EpochId)
+	if shouldSetExpiry {
+		pipe.Expire(ctx, activeSnapshottersKey, 30*time.Minute)
+		log.Debugf("Pipeline: Queued EXPIRE for active snapshotters key %s", activeSnapshottersKey)
+	}
+
+	// Queue HSet for epoch submissions raw dump
+	pipe.HSet(ctx, epochSubmissionKey, details.submissionID.String(), submissionJSON)
+	pipe.Expire(ctx, epochSubmissionKey, 30*time.Minute)
+
+	_, execErr := pipe.Exec(ctx)
+	if execErr != nil {
+		errMsg := fmt.Sprintf("Failed to execute submission Redis pipeline for submission ID %s: %s", details.submissionID.String(), execErr.Error())
 		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 		log.Error(errMsg)
+		err = fmt.Errorf("redis pipeline execution error: %w", execErr)
 		return err
 	}
 
-	log.Debugf(
-		"✅ Successfully set submission with set %s and key %s for slot %d, epoch %d, project %s",
-		submissionSetByHeaderKey,
-		submissionKey,
-		details.submission.Request.SlotId,
-		details.submission.Request.EpochId,
-		details.submission.Request.ProjectId,
-	)
+	log.Debugf("✅ Redis pipeline executed successfully for submission ID %s", details.submissionID.String())
 
-	// Add slot to a set of active slots for this epoch
-	activeSnapshottersKey := redis.ActiveSnapshottersForEpoch(details.dataMarketAddress, details.submission.Request.EpochId)
-	if err := redis.RedisClient.SAdd(context.Background(), activeSnapshottersKey, strconv.FormatUint(details.submission.Request.SlotId, 10)).Err(); err != nil {
-		errMsg := fmt.Sprintf("Error tracking active slot: %s", err.Error())
-		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
-		log.Error(errMsg)
-	}
-
-	// sets the expiry status in-memory as well so we dont make round trips to redis for this
-	if !s.isActiveSnapshotterExpirySetForEpoch(details.dataMarketAddress, details.submission.Request.EpochId) {
-		if err := redis.RedisClient.Expire(context.Background(), activeSnapshottersKey, 30*time.Minute).Err(); err != nil {
-			log.Errorf("Failed to set expiry for active snapshotters set: %v", err)
-		} else {
-			// Mark that we've set expiry for this epoch
-			s.markActiveSnapshotterExpirySetForEpoch(details.dataMarketAddress, details.submission.Request.EpochId)
-			log.Debugf("Set expiry for active snapshotters for epoch %d", details.submission.Request.EpochId)
-		}
-	}
-
-	// Marshal the submission data to store in Redis
-	submissionJSON, err := json.Marshal(details.submission)
-	if err != nil {
-		log.Errorf("Error serializing submission: %v", err)
-		return fmt.Errorf("json marshalling error: %s", err.Error())
-	}
-
-	// This Htable is the raw dump of all submissions for a given epoch and data market
-	epochSubmissionKey := redis.EpochSubmissionsKey(details.dataMarketAddress, details.submission.Request.EpochId)
-	if err := redis.RedisClient.HSet(context.Background(), epochSubmissionKey, details.submissionID.String(), submissionJSON).Err(); err != nil {
-		log.Errorf("Failed to write submission details to Redis: %v", err)
-		return fmt.Errorf("redis client failure: %s", err.Error())
-	}
-
-	// Set the expiry for the epoch submissions hash table
-	if err := redis.RedisClient.Expire(context.Background(), epochSubmissionKey, 30*time.Minute).Err(); err != nil {
-		log.Errorf("Failed to set expiry for epoch submissions hash table %s: %v", epochSubmissionKey, err)
-		return fmt.Errorf("redis client failure: %s", err.Error())
+	// Mark expiry as set in memory if it was queued and pipeline succeeded
+	if shouldSetExpiry {
+		s.markActiveSnapshotterExpirySetForEpoch(details.dataMarketAddress, details.submission.Request.EpochId)
+		log.Debugf("Marked expiry set in memory for epoch %d after successful pipeline", details.submission.Request.EpochId)
 	}
 
 	// If submission setting was successful, prevent the defer from decrementing the counter
@@ -535,9 +530,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 	// Log final state after successful submission setting
 	if submissionCountIncremented {
-		// Fetch the latest count for logging purposes if it was incremented
-		finalCountStr, _ := redis.Get(context.Background(), slotEpochCounterKey)
-		log.Debugf("✅ Successfully set submission and incremented count for slot %s (final count string: '%s')", slotIDStr, finalCountStr)
+		log.Debugf("✅ Successfully set submission and incremented count for slot %s", slotIDStr)
 	} else if isFullNode(snapshotterAddr.Hex()) {
 		log.Debugf("✅ Successfully set submission for slot %s (full node, no count increment)", new(big.Int).SetUint64(details.submission.Request.SlotId).String())
 	} else {
