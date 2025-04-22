@@ -19,51 +19,38 @@ type BoolCmd = redis.BoolCmd
 
 // --- ADDED SCRIPT DEFINITION AND LOADING FUNCTION ---
 const checkDuplicateAndIncrScript = `
--- KEYS[1]: submissionKey (e.g., submission:<epochID>:<projectID>:<slotID>:<dataMarketAddress>)
--- KEYS[2]: counterKey (e.g., submission:count:slot:<slotID>:<epochID>:<dataMarketAddress>)
--- KEYS[3]: exceededKey (e.g., submission:exceeded:slot:<slotID>:<epochID>:<dataMarketAddress>)
+-- KEYS[1]: counterKey (e.g., SlotEpochCounter.<dataMarketAddress>.<slotId>.<epochId>)
 -- ARGV[1]: limit (e.g., "2")
 -- ARGV[2]: counter expiry milliseconds (e.g., "300000" for 5 minutes)
--- ARGV[3]: exceeded flag expiry seconds (e.g., "300" for 5 minutes)
 --
 -- Returns:
 -- 0: OK (Counter incremented)
--- 1: Duplicate submission
--- 2: Submission limit reached (Counter not incremented)
+-- 1: Submission limit reached (Counter not incremented)
 
-local submission_key = KEYS[1]
-local counter_key = KEYS[2]
-local exceeded_key = KEYS[3]
+local counter_key = KEYS[1]
 local limit = tonumber(ARGV[1])
 local counter_expiry_ms = tonumber(ARGV[2])
-local exceeded_expiry_s = tonumber(ARGV[3])
 
--- 1. Check for duplicate submission
-if redis.call('EXISTS', submission_key) == 1 then
-  return 1 -- Duplicate
-end
-
--- 2. Check current count WITHOUT incrementing yet
+-- 1. Check current count WITHOUT incrementing yet
 local current_count_str = redis.call('GET', counter_key)
 local current_count = 0
 if current_count_str then
   current_count = tonumber(current_count_str) or 0
 end
 
--- 3. Check if limit is already reached
+-- 2. Check if limit is already reached
 if current_count >= limit then
-  -- Set exceeded flag (and its expiry) unconditionally if limit reached
-  redis.call('SET', exceeded_key, 'true', 'EX', exceeded_expiry_s)
-  return 2 -- Limit Reached
+  -- Do not increment, just return limit reached status
+  return 1 -- Limit Reached
 end
 
--- 4. Limit is not reached, proceed to increment
-local new_count = redis.call('INCR', counter_key)
+-- 3. Limit is not reached, proceed to increment
+redis.call('INCR', counter_key)
 
--- 5. Set expiry on counter key unconditionally after incrementing
+-- 4. Set expiry on counter key unconditionally after incrementing
 redis.call('PEXPIRE', counter_key, counter_expiry_ms)
 
--- 6. Return success indicator (counter was incremented)
+-- 5. Return success indicator (counter was incremented)
 return 0 -- OK
 `
 
