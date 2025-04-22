@@ -189,16 +189,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 	// NOTE: removing the constructor of SnapshotData because it is no longer needed for the setting of GetSnapshotterSlotSubmissionsHtable
 
-	var counterIncremented bool = false // Track if Lua script incremented counter
-
-	// Create the main submission key needed early for Lua script and later logic
-	submissionKey := redis.SubmissionKey(
-		details.dataMarketAddress,
-		details.submission.Request.EpochId,
-		details.submission.Request.ProjectId,
-		new(big.Int).SetUint64(details.submission.Request.SlotId).String(),
-	)
-
 	if !isFullNode(snapshotterAddr.Hex()) {
 
 		// --- Lua Script Execution for Duplicate/Count Check ---
@@ -240,7 +230,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		switch scriptResult {
 		case 0: // OK - Counter was incremented
 			log.Debugf("Lua script OK for slot %d, epoch %d. Counter incremented.", details.submission.Request.SlotId, details.submission.Request.EpochId)
-			counterIncremented = true
 		case 1: // Limit Reached
 			errMsg := fmt.Sprintf("Lua script reported slot epoch submission count exceeded for slotID %d, epoch %d", details.submission.Request.SlotId, details.submission.Request.EpochId)
 			reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
@@ -356,6 +345,13 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		}
 	}
 
+	submissionKey := redis.SubmissionKey(
+		details.dataMarketAddress,
+		details.submission.Request.EpochId,
+		details.submission.Request.ProjectId,
+		new(big.Int).SetUint64(details.submission.Request.SlotId).String(),
+	)
+
 	value := fmt.Sprintf("%s.%s", details.submissionID.String(), protojson.Format(details.submission))
 
 	// Create the submission set key
@@ -371,20 +367,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			details.submission.Request.SlotId, details.submission.Request.EpochId, details.submission.Request.ProjectId, err.Error())
 		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, logMsg, time.Now().String(), "High")
 		log.Error(logMsg)
-
-		// Rollback counter if Lua incremented it
-		if counterIncremented {
-			log.Warnf("SetSubmission failed after Lua script incremented counter. Attempting rollback (decrement) for slot %d, epoch %d.", details.submission.Request.SlotId, details.submission.Request.EpochId)
-			// Reconstruct the counter key used by the Lua script
-			slotIDStr := strconv.FormatUint(details.submission.Request.SlotId, 10)
-			counterKey := redis.SlotEpochSubmissionsKey(details.dataMarketAddress, slotIDStr, details.submission.Request.EpochId)
-			if decrErr := redis.RedisClient.Decr(context.Background(), counterKey).Err(); decrErr != nil {
-				log.Errorf("Failed to decrement counter key '%s' during rollback: %v", counterKey, decrErr)
-			} else {
-				log.Infof("↩️ Successfully decremented counter key '%s' during rollback.", counterKey)
-			}
-		}
-
 		return err
 	}
 
