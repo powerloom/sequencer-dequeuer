@@ -76,6 +76,12 @@ func (sh *SubmissionHandler) Start() {
 	// Start a cleanup goroutine
 	go sh.periodicActiveExpiryReset()
 
+	// Load Lua script at startup (using the function from the redis package)
+	_, err := redis.LoadCheckDuplicateAndIncrScript(context.Background())
+	if err != nil {
+		log.Fatalf("Cannot start SubmissionHandler: Lua script loading failed: %v", err)
+	}
+
 	// Implement the submission handling logic here
 	sh.startSubmissionDequeuer()
 }
@@ -211,8 +217,75 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	}
 
 	var errMsg string
+	var counterIncremented bool = false // Track if Lua script incremented counter
+
+	// Create the main submission key needed early for Lua script and later logic
+	submissionKey := redis.SubmissionKey(
+		details.dataMarketAddress,
+		details.submission.Request.EpochId,
+		details.submission.Request.ProjectId,
+		new(big.Int).SetUint64(details.submission.Request.SlotId).String(),
+	)
 
 	if !isFullNode(snapshotterAddr.Hex()) {
+
+		// --- Lua Script Execution for Duplicate/Count Check ---
+		slotIDStr := strconv.FormatUint(details.submission.Request.SlotId, 10)
+		// Define the counter key based on the specific logic for non-full nodes
+		counterKey := redis.SlotEpochSubmissionsKey(details.dataMarketAddress, slotIDStr, details.submission.Request.EpochId)
+		exceededKey := redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, slotIDStr, details.submission.Request.EpochId)
+		limit := "2" // TODO: Make configurable?
+		counterExpiryMs := strconv.FormatInt(5*time.Minute.Milliseconds(), 10)
+		exceededExpiryS := strconv.FormatInt(int64((5 * time.Minute).Seconds()), 10)
+
+		scriptArgs := []interface{}{limit, counterExpiryMs, exceededExpiryS}
+		scriptKeys := []string{submissionKey, counterKey, exceededKey}
+
+		log.Debugf("Executing CheckDuplicateAndIncrScript for non-full node. Keys: %v, Args: %v", scriptKeys, scriptArgs)
+		resultCmd := redis.RedisClient.EvalSha(context.Background(), redis.CheckDuplicateAndIncrSha, scriptKeys, scriptArgs...)
+		scriptResult, err := resultCmd.Int64()
+
+		if err != nil {
+			if strings.Contains(err.Error(), "NOSCRIPT") {
+				log.Warnf("NOSCRIPT error executing CheckDuplicateAndIncrScript, attempting to reload and retry.")
+				newSha, loadErr := redis.LoadCheckDuplicateAndIncrScript(context.Background())
+				if loadErr != nil {
+					errMsg := fmt.Sprintf("Failed to reload CheckDuplicateAndIncrScript after NOSCRIPT error: %v", loadErr)
+					reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+					log.Error(errMsg)
+					return errors.New(errMsg)
+				}
+				resultCmd = redis.RedisClient.EvalSha(context.Background(), newSha, scriptKeys, scriptArgs...)
+				scriptResult, err = resultCmd.Int64()
+			}
+		}
+
+		if err != nil {
+			errMsg := fmt.Sprintf("Error executing CheckDuplicateAndIncrScript: %v", err)
+			reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+			log.Error(errMsg)
+			return errors.New(errMsg)
+		}
+
+		switch scriptResult {
+		case 0: // OK - Counter was incremented
+			log.Debugf("Lua script OK for slot %d, epoch %d. Counter incremented.", details.submission.Request.SlotId, details.submission.Request.EpochId)
+			counterIncremented = true
+		case 1: // Duplicate
+			log.Infof("Lua script reported duplicate submission for key: %s", submissionKey)
+			return nil
+		case 2: // Limit Reached
+			errMsg = fmt.Sprintf("Lua script reported slot epoch submission count exceeded for slotID %d, epoch %d", details.submission.Request.SlotId, details.submission.Request.EpochId)
+			reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+			log.Error(errMsg)
+			return errors.New(errMsg)
+		default:
+			errMsg = fmt.Sprintf("Unexpected result from CheckDuplicateAndIncrScript: %d", scriptResult)
+			reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
+			log.Error(errMsg)
+			return errors.New(errMsg)
+		}
+
 		if config.SettingsObj.VerifySubmissionDataSourceIndex {
 			log.Debugf(
 				"Verifying submission data source index for data market %s, slot ID %d, epoch ID %d project ID %s",
@@ -319,18 +392,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			}
 		}
 
-		epochSubmissionExceededKey := redis.SlotEpochSubmissionCountExceeded(
-			details.dataMarketAddress,
-			strconv.FormatUint(details.submission.Request.SlotId, 10),
-			details.submission.Request.EpochId,
-		)
-		val, _ := redis.Get(context.Background(), epochSubmissionExceededKey)
-		if val != "" {
-			errMsg = fmt.Sprintf("Slot epoch submission count exceeded for slotID %d", details.submission.Request.SlotId)
-			reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
-			log.Error(errMsg)
-		}
-
 		if errMsg != "" {
 			log.Debugf("Snapshot submission rejected: %s", errMsg)
 			return errors.New("invalid snapshot")
@@ -377,20 +438,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		}
 	}
 
-	// Create the submission key
-	submissionKey := redis.SubmissionKey(
-		details.dataMarketAddress,
-		details.submission.Request.EpochId,
-		details.submission.Request.ProjectId,
-		new(big.Int).SetUint64(details.submission.Request.SlotId).String(),
-	)
-
-	// Check if the submission already exists in Redis
-	if val, _ := redis.Get(context.Background(), submissionKey); val != "" {
-		log.Infof("Submission already exists in Redis for key: %s", submissionKey)
-		return nil
-	}
-
 	value := fmt.Sprintf("%s.%s", details.submissionID.String(), protojson.Format(details.submission))
 
 	// Create the submission set key
@@ -406,6 +453,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 			details.submission.Request.SlotId, details.submission.Request.EpochId, details.submission.Request.ProjectId, err.Error())
 		reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 		log.Error(errMsg)
+		// TODO: If this fails AFTER Lua incremented (counterIncremented=true), need to decrement counterKey.
 		return err
 	}
 
@@ -455,33 +503,6 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	if err := redis.RedisClient.Expire(context.Background(), epochSubmissionKey, 30*time.Minute).Err(); err != nil {
 		log.Errorf("Failed to set expiry for epoch submissions hash table %s: %v", epochSubmissionKey, err)
 		return fmt.Errorf("redis client failure: %s", err.Error())
-	}
-
-	if !isFullNode(snapshotterAddr.Hex()) {
-		slotID := strconv.FormatUint(details.submission.Request.SlotId, 10)
-		slotEpochCounterKey := redis.SlotEpochSubmissionsKey(details.dataMarketAddress, slotID, details.submission.Request.EpochId)
-		count, err := redis.Incr(context.Background(), slotEpochCounterKey)
-		if err != nil {
-			log.Errorf("Failed to increment slot epoch counter: %v", err)
-			return fmt.Errorf("redis client failure: %s", err.Error())
-		} else {
-			if count > 2 {
-				log.Errorf("Slot epoch submission count exceeded for slot %s", slotID)
-
-				// Set a flag in Redis to indicate that the submission count exceeded
-				redisKey := redis.SlotEpochSubmissionCountExceeded(details.dataMarketAddress, slotID, details.submission.Request.EpochId)
-				if err := redis.Set(context.Background(), redisKey, "true", 5*time.Minute); err != nil {
-					log.Errorf("Failed to set Redis flag for exceeded submission count: %s", err.Error())
-					return fmt.Errorf("failed to set Redis flag: %s", err.Error())
-				}
-			}
-		}
-
-		// Set the expiry for the slot epoch counter key
-		if err := redis.RedisClient.Expire(context.Background(), slotEpochCounterKey, 5*time.Minute).Err(); err != nil {
-			log.Errorf("Failed to set expiry for slot epoch counter %s: %v", slotEpochCounterKey, err)
-			return fmt.Errorf("redis client failure: %s", err.Error())
-		}
 	}
 
 	return nil
