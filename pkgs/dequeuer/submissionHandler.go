@@ -189,6 +189,8 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 
 	// NOTE: removing the constructor of SnapshotData because it is no longer needed for the setting of GetSnapshotterSlotSubmissionsHtable
 
+	var counterIncremented bool = false
+
 	if !isFullNode(snapshotterAddr.Hex()) {
 
 		// --- Lua Script Execution for Duplicate/Count Check ---
@@ -230,6 +232,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		switch scriptResult {
 		case 0: // OK - Counter was incremented
 			log.Debugf("Lua script OK for slot %d, epoch %d. Counter incremented.", details.submission.Request.SlotId, details.submission.Request.EpochId)
+			counterIncremented = true // Set the flag
 		case 1: // Limit Reached
 			errMsg := fmt.Sprintf("Lua script reported slot epoch submission count exceeded for slotID %d, epoch %d", details.submission.Request.SlotId, details.submission.Request.EpochId)
 			reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
@@ -268,7 +271,12 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 				errMsg := fmt.Sprintf("Data source configuration missing for data market: %s (lowercase: %s)", details.dataMarketAddress, strings.ToLower(details.dataMarketAddress))
 				reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 				log.Error(errMsg)
-				return fmt.Errorf("no data sources found for the specified data market: %s", details.dataMarketAddress)
+
+				if counterIncremented {
+					log.Warnf("Data source list missing after Lua script incremented counter. Attempting rollback (decrement) for slot %d, epoch %d.", details.submission.Request.SlotId, details.submission.Request.EpochId)
+					attemptCounterRollback(counterKey, details.submission.Request.SlotId, details.submission.Request.EpochId)
+				}
+				return fmt.Errorf("no data sources found for the specified data market: %s", details.dataMarketAddress) // Return original error
 			}
 
 			// Fetch the data source index for the submission
@@ -294,6 +302,12 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 				errMsg := fmt.Sprintf("Failed to fetch pair contract index: %s", err.Error())
 				reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")
 				log.Error(errMsg)
+
+				if counterIncremented {
+					log.Warnf("Data source index fetch failed after Lua script incremented counter. Attempting rollback (decrement) for slot %d, epoch %d.", details.submission.Request.SlotId, details.submission.Request.EpochId)
+					attemptCounterRollback(counterKey, details.submission.Request.SlotId, details.submission.Request.EpochId)
+				}
+				return errors.New("failed to verify pair contract index") // Return original error
 			}
 
 			if expectedContractAddr != extractedContractAddr {
@@ -306,7 +320,12 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 					extractedContractAddr,
 					expectedContractAddr,
 				)
-				return errors.New("failed to verify pair contract index")
+
+				if counterIncremented {
+					log.Warnf("Data source index mismatch after Lua script incremented counter. Attempting rollback (decrement) for slot %d, epoch %d.", details.submission.Request.SlotId, details.submission.Request.EpochId)
+					attemptCounterRollback(counterKey, details.submission.Request.SlotId, details.submission.Request.EpochId)
+				}
+				return errors.New("failed to verify pair contract index") // Return original error
 			} else {
 				log.Debugf(
 					"✅ Verified pair contract index for data market %s, epoch %d, slot %d project ID %s: extracted %s from submission, expected %s from calculation",
@@ -419,6 +438,15 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 	}
 
 	return nil
+}
+
+func attemptCounterRollback(counterKey string, slotID uint64, epochID uint64) {
+	log.Warnf("Attempting counter rollback (decrement) for key '%s' (slot %d, epoch %d).", counterKey, slotID, epochID)
+	if decrErr := redis.RedisClient.Decr(context.Background(), counterKey).Err(); decrErr != nil {
+		log.Errorf("Failed to decrement counter key '%s' during rollback: %v", counterKey, decrErr)
+	} else {
+		log.Infof("↩️ Successfully decremented counter key '%s' during rollback.", counterKey)
+	}
 }
 
 func getSnapshotterIntValue(snapshotAddr common.Address) *big.Int {
