@@ -17,6 +17,65 @@ var RedisClient *redis.Client
 
 type BoolCmd = redis.BoolCmd
 
+// --- ADDED SCRIPT DEFINITION AND LOADING FUNCTION ---
+const checkDuplicateAndIncrScript = `
+-- KEYS[1]: counterKey (e.g., SlotEpochCounter.<dataMarketAddress>.<slotId>.<epochId>)
+-- ARGV[1]: limit (e.g., "2")
+-- ARGV[2]: counter expiry milliseconds (e.g., "300000" for 5 minutes)
+--
+-- Returns:
+-- 0: OK (Counter incremented)
+-- 1: Submission limit reached (Counter not incremented)
+
+local counter_key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local counter_expiry_ms = tonumber(ARGV[2])
+
+-- 1. Check current count WITHOUT incrementing yet
+local current_count_str = redis.call('GET', counter_key)
+local current_count = 0
+if current_count_str then
+  current_count = tonumber(current_count_str) or 0
+end
+
+-- 2. Check if limit is already reached
+if current_count >= limit then
+  -- Do not increment, just return limit reached status
+  return 1 -- Limit Reached
+end
+
+-- 3. Limit is not reached, proceed to increment
+redis.call('INCR', counter_key)
+
+-- 4. Set expiry on counter key unconditionally after incrementing
+redis.call('PEXPIRE', counter_key, counter_expiry_ms)
+
+-- 5. Return success indicator (counter was incremented)
+return 0 -- OK
+`
+
+// CheckDuplicateAndIncrSha holds the SHA1 hash of the checkDuplicateAndIncrScript.
+var CheckDuplicateAndIncrSha string
+
+// LoadCheckDuplicateAndIncrScript loads the script into Redis and stores its SHA.
+// It should be called once during application startup.
+// It is idempotent and safe to call multiple times, though redundant.
+func LoadCheckDuplicateAndIncrScript(ctx context.Context) (string, error) {
+	if RedisClient == nil {
+		return "", errors.New("redis client not initialized")
+	}
+	if CheckDuplicateAndIncrSha == "" {
+		var err error
+		CheckDuplicateAndIncrSha, err = RedisClient.ScriptLoad(ctx, checkDuplicateAndIncrScript).Result()
+		if err != nil {
+			log.Errorf("❌ Failed to load Check/Incr Redis Lua script: %v", err)
+			return "", fmt.Errorf("failed to load check/incr redis script: %w", err)
+		}
+		log.Infof("🚀 Loaded Check/Incr Redis Lua script SHA: %s", CheckDuplicateAndIncrSha)
+	}
+	return CheckDuplicateAndIncrSha, nil
+}
+
 // TODO: Pool size failures to be checked
 func NewRedisClient() *redis.Client {
 	db, err := strconv.Atoi(config.SettingsObj.RedisDB)

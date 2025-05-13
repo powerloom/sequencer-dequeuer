@@ -22,5 +22,8 @@ FROM scratch
 # Copy the binary from the builder stage
 COPY --from=builder /dequeuer /dequeuer
 
+# Copy CA certificates from the builder stage
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
 # Command to run the application
 CMD ["/dequeuer"]
