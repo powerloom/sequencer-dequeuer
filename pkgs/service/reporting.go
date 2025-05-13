@@ -2,11 +2,14 @@ package service
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"sequencer-dequeuer/pkgs/reporting"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var ReportingInstance *ReportingService
@@ -17,8 +20,26 @@ type ReportingService struct {
 }
 
 func InitializeReportingService(url string, timeout time.Duration) {
+	// Get the system certificate pool
+	rootCAs, err := x509.SystemCertPool()
+	if err != nil {
+		log.Warnf("Failed to get system certificate pool: %v. Creating new pool.", err)
+		rootCAs = x509.NewCertPool()
+	}
+
+	// Create HTTP client with custom transport
+	client := &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: rootCAs,
+			},
+		},
+	}
+
 	ReportingInstance = &ReportingService{
-		url: url, client: &http.Client{Timeout: timeout},
+		url:    url,
+		client: client,
 	}
 	go ReportingInstance.StartListening()
 }
