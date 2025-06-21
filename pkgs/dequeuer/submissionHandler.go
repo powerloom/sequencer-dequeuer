@@ -210,7 +210,7 @@ func (s *SubmissionHandler) verifyAndStoreSubmission(details SubmissionDetails) 
 		if err != nil {
 			if strings.Contains(err.Error(), "NOSCRIPT") {
 				log.Warnf("NOSCRIPT error executing CheckDuplicateAndIncrScript, attempting to reload and retry.")
-				newSha, loadErr := redis.LoadCheckDuplicateAndIncrScript(context.Background())
+				newSha, loadErr := redis.ReloadCheckDuplicateAndIncrScript(context.Background())
 				if loadErr != nil {
 					errMsg := fmt.Sprintf("Failed to reload CheckDuplicateAndIncrScript after NOSCRIPT error: %v", loadErr)
 					reporting.SendFailureNotification(pkgs.VerifyAndStoreSubmission, errMsg, time.Now().String(), "High")

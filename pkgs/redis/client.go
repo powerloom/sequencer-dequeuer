@@ -76,6 +76,23 @@ func LoadCheckDuplicateAndIncrScript(ctx context.Context) (string, error) {
 	return CheckDuplicateAndIncrSha, nil
 }
 
+// ReloadCheckDuplicateAndIncrScript reloads the script into Redis and stores its SHA.
+// It should be called if the script is not found in Redis.
+func ReloadCheckDuplicateAndIncrScript(ctx context.Context) (string, error) {
+	if RedisClient == nil {
+		return "", errors.New("redis client not initialized")
+	}
+
+	var err error
+	CheckDuplicateAndIncrSha, err = RedisClient.ScriptLoad(ctx, checkDuplicateAndIncrScript).Result()
+	if err != nil {
+		log.Errorf("❌ Failed to reload Check/Incr Redis Lua script: %v", err)
+		return "", fmt.Errorf("failed to reload check/incr redis script: %w", err)
+	}
+	log.Infof("🔄 Reloaded Check/Incr Redis Lua script SHA: %s", CheckDuplicateAndIncrSha)
+	return CheckDuplicateAndIncrSha, nil
+}
+
 // TODO: Pool size failures to be checked
 func NewRedisClient() *redis.Client {
 	db, err := strconv.Atoi(config.SettingsObj.RedisDB)
