@@ -13,6 +13,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	rpchelper "github.com/powerloom/rpc-helper"
+	"github.com/powerloom/rpc-helper/reporting"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -64,7 +65,7 @@ func (s *Settings) IsValidDataMarketAddress(address common.Address) bool {
 
 // ToRPCConfig creates an RPC config from the settings
 func (s *Settings) ToRPCConfig() *rpchelper.RPCConfig {
-	return &rpchelper.RPCConfig{
+	config := &rpchelper.RPCConfig{
 		Nodes: func() []rpchelper.NodeConfig {
 			var nodes []rpchelper.NodeConfig
 			for _, url := range s.RPCNodes {
@@ -84,6 +85,17 @@ func (s *Settings) ToRPCConfig() *rpchelper.RPCConfig {
 		MaxRetryDelay:  time.Duration(s.MaxRetryDelayS) * time.Second,
 		RequestTimeout: time.Duration(s.RequestTimeoutS) * time.Second,
 	}
+
+	// Add webhook configuration if Slack reporting URL is provided
+	if s.SlackReportingUrl != "" {
+		config.WebhookConfig = &reporting.WebhookConfig{
+			URL:     s.SlackReportingUrl,
+			Timeout: time.Duration(s.RequestTimeoutS) * time.Second,
+			Retries: s.MaxRetries,
+		}
+	}
+
+	return config
 }
 
 func LoadConfig() {
