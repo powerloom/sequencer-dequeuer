@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
-	rpchelper "github.com/powerloom/rpc-helper"
+	rpchelper "github.com/powerloom/go-rpc-helper"
 	log "github.com/sirupsen/logrus"
 )
 

@@ -8,7 +8,7 @@ require (
 	github.com/ethereum/go-ethereum v1.14.7
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/google/uuid v1.3.1
-	github.com/powerloom/rpc-helper v0.0.0-00010101000000-000000000000
+	github.com/powerloom/go-rpc-helper v1.0.1
 	github.com/sirupsen/logrus v1.9.3
 	google.golang.org/protobuf v1.34.2
 )
