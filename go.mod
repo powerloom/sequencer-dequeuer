@@ -4,10 +4,11 @@ go 1.23
 
 require (
 	github.com/alicebob/miniredis/v2 v2.33.0
-	github.com/cenkalti/backoff/v4 v4.2.0
+	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/ethereum/go-ethereum v1.14.7
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/google/uuid v1.3.1
+	github.com/powerloom/go-rpc-helper v1.0.1
 	github.com/sirupsen/logrus v1.9.3
 	google.golang.org/protobuf v1.34.2
 )

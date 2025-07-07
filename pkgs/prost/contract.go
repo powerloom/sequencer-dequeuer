@@ -15,24 +15,55 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	rpchelper "github.com/powerloom/go-rpc-helper"
 	log "github.com/sirupsen/logrus"
 )
 
 var (
-	Client   *ethclient.Client
-	Instance *protocolStateContractABIGen.Contract
+	RPCHelper       *rpchelper.RPCHelper
+	ContractBackend *rpchelper.ContractBackend
+	Client          *ethclient.Client // Deprecated: kept for backward compatibility
+	Instance        *protocolStateContractABIGen.Contract
 )
 
 func ConfigureClient() {
+	// Initialize RPC helper with configuration from settings
+	rpcConfig := config.SettingsObj.ToRPCConfig()
+	RPCHelper = rpchelper.NewRPCHelper(rpcConfig)
+
+	// Initialize the RPC helper
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := RPCHelper.Initialize(ctx); err != nil {
+		log.Errorf("Failed to initialize RPC helper: %s", err)
+
+		// Give the alert processor time to send webhooks before terminating
+		if rpcConfig.WebhookConfig != nil {
+			log.Info("Waiting for alert notifications to be sent...")
+			time.Sleep(5 * time.Second)
+		}
+
+		log.Fatal(err)
+	}
+
+	// Keep the legacy Client for backward compatibility if needed
 	rpcClient, err := rpc.DialOptions(context.Background(), config.SettingsObj.ClientUrl, rpc.WithHTTPClient(&http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}))
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	Client = ethclient.NewClient(rpcClient)
+
+	// Create the ContractBackend that will use the RPC helper for all contract calls
+	ContractBackend = RPCHelper.NewContractBackend()
+
+	log.Info("RPC helper initialized successfully with failover support")
 }
 
 func ConfigureContractInstance() {
-	Instance, _ = protocolStateContractABIGen.NewContract(common.HexToAddress(config.SettingsObj.ContractAddress), Client)
+	// Use ContractBackend for automatic retry and failover
+	Instance, _ = protocolStateContractABIGen.NewContract(common.HexToAddress(config.SettingsObj.ContractAddress), ContractBackend)
 }
 
 func MustQuery[K any](ctx context.Context, call func() (val K, err error)) (K, error) {
