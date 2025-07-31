@@ -58,22 +58,19 @@ return 0 -- OK
 var CheckDuplicateAndIncrSha string
 
 // LoadCheckDuplicateAndIncrScript loads the script into Redis and stores its SHA.
-// It should be called once during application startup.
-// It is idempotent and safe to call multiple times, though redundant.
 func LoadCheckDuplicateAndIncrScript(ctx context.Context) (string, error) {
 	if RedisClient == nil {
 		return "", errors.New("redis client not initialized")
 	}
-	if CheckDuplicateAndIncrSha == "" {
-		var err error
-		CheckDuplicateAndIncrSha, err = RedisClient.ScriptLoad(ctx, checkDuplicateAndIncrScript).Result()
-		if err != nil {
-			log.Errorf("❌ Failed to load Check/Incr Redis Lua script: %v", err)
-			return "", fmt.Errorf("failed to load check/incr redis script: %w", err)
-		}
-		log.Infof("🚀 Loaded Check/Incr Redis Lua script SHA: %s", CheckDuplicateAndIncrSha)
+	var err error
+	shaReturned, err := RedisClient.ScriptLoad(ctx, checkDuplicateAndIncrScript).Result()
+	CheckDuplicateAndIncrSha = shaReturned
+	if err != nil {
+		log.Errorf("❌ Failed to load Check/Incr Redis Lua script: %v", err)
+		return "", fmt.Errorf("failed to load check/incr redis script: %w", err)
 	}
-	return CheckDuplicateAndIncrSha, nil
+	log.Infof("🚀 Loaded Check/Incr Redis Lua script SHA: %s", shaReturned)
+	return shaReturned, nil
 }
 
 // TODO: Pool size failures to be checked

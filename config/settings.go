@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	rpchelper "github.com/powerloom/go-rpc-helper"
+	"github.com/powerloom/go-rpc-helper/reporting"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -40,6 +42,14 @@ type Settings struct {
 	// this is a function of the epoch size that depends on the source chain block time,
 	// and the snapshot submission window that depends on Powerloom chain block time
 	EpochAcceptanceWindow int
+
+	// RPC Configuration
+	RPCNodes        []string `json:"rpc_nodes"`
+	ArchiveNodes    []string `json:"archive_nodes"`
+	MaxRetries      int      `json:"max_retries"`
+	RetryDelayMs    int      `json:"retry_delay_ms"`
+	MaxRetryDelayS  int      `json:"max_retry_delay_s"`
+	RequestTimeoutS int      `json:"request_timeout_s"`
 }
 
 // Add this new method to the Settings struct
@@ -51,6 +61,41 @@ func (s *Settings) IsValidDataMarketAddress(address common.Address) bool {
 		}
 	}
 	return false
+}
+
+// ToRPCConfig creates an RPC config from the settings
+func (s *Settings) ToRPCConfig() *rpchelper.RPCConfig {
+	config := &rpchelper.RPCConfig{
+		Nodes: func() []rpchelper.NodeConfig {
+			var nodes []rpchelper.NodeConfig
+			for _, url := range s.RPCNodes {
+				nodes = append(nodes, rpchelper.NodeConfig{URL: url})
+			}
+			return nodes
+		}(),
+		ArchiveNodes: func() []rpchelper.NodeConfig {
+			var nodes []rpchelper.NodeConfig
+			for _, url := range s.ArchiveNodes {
+				nodes = append(nodes, rpchelper.NodeConfig{URL: url})
+			}
+			return nodes
+		}(),
+		MaxRetries:     s.MaxRetries,
+		RetryDelay:     time.Duration(s.RetryDelayMs) * time.Millisecond,
+		MaxRetryDelay:  time.Duration(s.MaxRetryDelayS) * time.Second,
+		RequestTimeout: time.Duration(s.RequestTimeoutS) * time.Second,
+	}
+
+	// Add webhook configuration if Slack reporting URL is provided
+	if s.SlackReportingUrl != "" {
+		config.WebhookConfig = &reporting.WebhookConfig{
+			URL:     s.SlackReportingUrl,
+			Timeout: time.Duration(s.RequestTimeoutS) * time.Second,
+			Retries: s.MaxRetries,
+		}
+	}
+
+	return config
 }
 
 func LoadConfig() {
@@ -100,6 +145,30 @@ func LoadConfig() {
 		log.Fatalf("Failed to parse EPOCH_ACCEPTANCE_WINDOW environment variable: %v", err)
 	}
 
+	// Parse RPC nodes from environment
+	rpcNodesStr := getEnv("RPC_NODES", "[]")
+	var rpcNodes []string
+	if err := json.Unmarshal([]byte(rpcNodesStr), &rpcNodes); err != nil {
+		log.Fatalf("Failed to parse RPC_NODES environment variable: %v", err)
+	}
+
+	// Parse archive nodes from environment
+	archiveNodesStr := getEnv("ARCHIVE_NODES", "[]")
+	var archiveNodes []string
+	if err := json.Unmarshal([]byte(archiveNodesStr), &archiveNodes); err != nil {
+		log.Fatalf("Failed to parse ARCHIVE_NODES environment variable: %v", err)
+	}
+
+	// Helper function to parse int environment variables
+	getEnvInt := func(key string, defaultValue int) int {
+		if val := getEnv(key, ""); val != "" {
+			if intVal, err := strconv.Atoi(val); err == nil {
+				return intVal
+			}
+		}
+		return defaultValue
+	}
+
 	// Create the config object first
 	config := Settings{
 		ClientUrl:                       getEnv("PROST_RPC_URL", ""),
@@ -115,6 +184,12 @@ func LoadConfig() {
 		ChainID:                         chainID,
 		DataSourcesByMarket:             make(map[string][]string), // Initialize empty map
 		EpochAcceptanceWindow:           epochAcceptanceWindow,
+		RPCNodes:                        rpcNodes,
+		ArchiveNodes:                    archiveNodes,
+		MaxRetries:                      getEnvInt("MAX_RETRIES", 3),
+		RetryDelayMs:                    getEnvInt("RETRY_DELAY_MS", 500),
+		MaxRetryDelayS:                  getEnvInt("MAX_RETRY_DELAY_S", 30),
+		RequestTimeoutS:                 getEnvInt("REQUEST_TIMEOUT_S", 30),
 	}
 
 	// Set the global SettingsObj
